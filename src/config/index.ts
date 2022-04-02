@@ -4,11 +4,13 @@ import { ExportServiceConfig, EXPORT_SERVICE_CONFIG_TOKEN } from "./config";
 import { DATABASE_CONFIG_TOKEN } from "./database";
 import { GRPC_SERVER_CONFIG } from "./grpc_service";
 import { IMAGE_SERVICE_CONFIG_TOKEN } from "./image_service";
+import { KAFKA_CONFIG_TOKEN } from "./kafka";
 import { LOG_CONFIG_TOKEN } from "./log";
 import { USER_SERVICE_CONFIG_TOKEN } from "./user_service";
 
 export * from "./log";
 export * from "./database";
+export * from "./kafka";
 export * from "./image_service";
 export * from "./user_service";
 export * from "./grpc_service";
@@ -28,6 +30,12 @@ export function bindToContainer(container: Container): void {
         .bind(DATABASE_CONFIG_TOKEN)
         .toInstance(
             () => container.get(EXPORT_SERVICE_CONFIG_TOKEN).databaseConfig
+        )
+        .inSingletonScope();
+    container
+        .bind(KAFKA_CONFIG_TOKEN)
+        .toInstance(
+            () => container.get(EXPORT_SERVICE_CONFIG_TOKEN).kafkaConfig
         )
         .inSingletonScope();
     container
