@@ -72,7 +72,8 @@ message GetExportListRequest {
 }
 
 message GetExportListResponse {
-    repeated Export export_list = 1;
+    uint32 total_export_count = 1;
+    repeated Export export_list = 2;
 }
 
 message GetExportRequest {
