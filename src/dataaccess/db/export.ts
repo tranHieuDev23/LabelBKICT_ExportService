@@ -111,11 +111,17 @@ export class ExportDataAccessorImpl implements ExportDataAccessor {
                     "=",
                     requestedByUserId
                 )
-                .andWhere(
-                    ColNameExportServiceExportExpireTime,
-                    ">=",
-                    requestTime
-                );
+                .andWhere((qb) => {
+                    qb.where(
+                        ColNameExportServiceExportExpireTime,
+                        "=",
+                        0
+                    ).orWhere(
+                        ColNameExportServiceExportExpireTime,
+                        ">=",
+                        requestTime
+                    );
+                });
             return +(rows[0] as any)["count"];
         } catch (error) {
             this.logger.error("failed to get export count", { error });
@@ -138,11 +144,17 @@ export class ExportDataAccessorImpl implements ExportDataAccessor {
                     "=",
                     requestedByUserId
                 )
-                .andWhere(
-                    ColNameExportServiceExportExpireTime,
-                    ">=",
-                    requestTime
-                )
+                .andWhere((qb) => {
+                    qb.where(
+                        ColNameExportServiceExportExpireTime,
+                        "=",
+                        0
+                    ).orWhere(
+                        ColNameExportServiceExportExpireTime,
+                        ">=",
+                        requestTime
+                    );
+                })
                 .offset(offset)
                 .limit(limit);
             return rows.map((row) => this.getExportFromRow(row));
