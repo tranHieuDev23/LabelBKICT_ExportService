@@ -1,6 +1,9 @@
+import { injected, token } from "brandi";
 import { Consumer } from "kafkajs";
 import { Logger } from "winston";
-import { KafkaConfig } from "../../../config";
+import { KafkaConfig, KAFKA_CONFIG_TOKEN } from "../../../config";
+import { LOGGER_TOKEN } from "../../../utils";
+import { KAFKA_CONSUMER_TOKEN } from "./consumer";
 
 export type MessageHandlerFunc = (message: Buffer | null) => Promise<void>;
 
@@ -62,3 +65,12 @@ export class MessageConsumer {
         );
     }
 }
+
+injected(
+    MessageConsumer,
+    KAFKA_CONSUMER_TOKEN,
+    KAFKA_CONFIG_TOKEN,
+    LOGGER_TOKEN
+);
+
+export const MESSAGE_CONSUMER_TOKEN = token<MessageConsumer>("MessageConsumer");

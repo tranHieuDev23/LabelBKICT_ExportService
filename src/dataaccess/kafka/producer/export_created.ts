@@ -8,8 +8,11 @@ import {
     ErrorWithStatus,
     LOGGER_TOKEN,
 } from "../../../utils";
-import { ExportCreated } from "../models";
 import { KAFKA_PRODUCER_TOKEN } from "./producer";
+
+export class ExportCreated {
+    constructor(public exportId: number) {}
+}
 
 export interface ExportCreatedProducer {
     createExportCreatedMessage(message: ExportCreated): Promise<void>;

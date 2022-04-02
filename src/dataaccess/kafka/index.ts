@@ -1,21 +1,16 @@
 import { Container } from "brandi";
-import { KAFKA_CONSUMER_TOKEN, getKafkaConsumer } from "./consumer/consumer";
+import * as consumer from "./consumer";
+import * as producer from "./producer";
 import { getKafkaInstance, KAFKA_INSTANCE_TOKEN } from "./kafka";
-import { KAFKA_PRODUCER_TOKEN, getKafkaProducer } from "./producer/producer";
 
-export * from "./models";
+export * from "./consumer";
+export * from "./producer";
 
 export function bindToContainer(container: Container): void {
     container
         .bind(KAFKA_INSTANCE_TOKEN)
         .toInstance(getKafkaInstance)
         .inSingletonScope();
-    container
-        .bind(KAFKA_PRODUCER_TOKEN)
-        .toInstance(getKafkaProducer)
-        .inSingletonScope();
-    container
-        .bind(KAFKA_CONSUMER_TOKEN)
-        .toInstance(getKafkaConsumer)
-        .inSingletonScope();
+    consumer.bindToContainer(container);
+    producer.bindToContainer(container);
 }
