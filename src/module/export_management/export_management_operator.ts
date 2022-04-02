@@ -1,8 +1,19 @@
+import { createReadStream } from "fs";
+import { join } from "path";
+import { status } from "@grpc/grpc-js";
 import { injected, token } from "brandi";
 import { Observable } from "rxjs";
+import { Logger } from "winston";
+import {
+    ExportDataAccessor,
+    EXPORT_DATA_ACCESSOR_TOKEN,
+} from "../../dataaccess/db";
 import { Export } from "../../proto/gen/Export";
+import { _ExportStatus_Values } from "../../proto/gen/ExportStatus";
 import { _ExportType_Values } from "../../proto/gen/ExportType";
 import { ImageListFilterOptions } from "../../proto/gen/ImageListFilterOptions";
+import { ErrorWithStatus, LOGGER_TOKEN, Timer, TIMER_TOKEN } from "../../utils";
+import { ApplicationConfig, APPLICATION_CONFIG_TOKEN } from "../../config";
 
 export interface ExportManagementOperator {
     createExport(
@@ -12,7 +23,6 @@ export interface ExportManagementOperator {
     ): Promise<Export>;
     getExportList(
         requestedByUserId: number,
-        requestTime: number,
         offset: number,
         limit: number
     ): Promise<{
@@ -25,37 +35,137 @@ export interface ExportManagementOperator {
 }
 
 export class ExportManagementOperatorImpl implements ExportManagementOperator {
+    constructor(
+        private readonly exportDM: ExportDataAccessor,
+        private readonly applicationConfig: ApplicationConfig,
+        private readonly timer: Timer,
+        private readonly logger: Logger
+    ) {}
+
     public async createExport(
         requestedByUserId: number,
         type: _ExportType_Values,
         filterOptions: ImageListFilterOptions
     ): Promise<Export> {
-        throw new Error("Method not implemented.");
+        const currentTime = this.timer.getCurrentTime();
+        const exportId = await this.exportDM.createExport({
+            requestedByUserId: requestedByUserId,
+            type: type,
+            requestTime: currentTime,
+            filterOptions: filterOptions,
+            status: _ExportStatus_Values.REQUESTED,
+            expireTime: 0,
+            exportedFilename: "",
+        });
+        return {
+            id: exportId,
+            requestedByUserId: requestedByUserId,
+            type: type,
+            requestTime: currentTime,
+            filterOptions: filterOptions,
+            status: _ExportStatus_Values.REQUESTED,
+            expireTime: 0,
+            exportedFileFilename: "",
+        };
     }
 
     public async getExportList(
         requestedByUserId: number,
-        requestTime: number,
         offset: number,
         limit: number
     ): Promise<{ totalExportCount: number; exportList: Export[] }> {
-        throw new Error("Method not implemented.");
+        const currentTime = this.timer.getCurrentTime();
+        const dmResults = await Promise.all([
+            this.exportDM.getExportCount(requestedByUserId, currentTime),
+            this.exportDM.getExportList(
+                requestedByUserId,
+                currentTime,
+                offset,
+                limit
+            ),
+        ]);
+        const totalExportCount = dmResults[0];
+        const exportList = dmResults[1];
+        return { totalExportCount, exportList };
     }
 
     public async getExport(id: number): Promise<Export> {
-        throw new Error("Method not implemented.");
+        const exportRequest = await this.exportDM.getExport(id);
+        if (exportRequest === null) {
+            this.logger.error("no export with export_id found", {
+                exportId: id,
+            });
+            throw new ErrorWithStatus(
+                `no export with export_id ${id} found`,
+                status.NOT_FOUND
+            );
+        }
+        return exportRequest;
     }
 
     public getExportFile(id: number): Observable<Buffer> {
-        throw new Error("Method not implemented.");
+        return new Observable<Buffer>((subscriber) => {
+            (async () => {
+                const exportRequest = await this.exportDM.getExport(id);
+                if (exportRequest === null) {
+                    this.logger.error("no export with export_id found", {
+                        exportId: id,
+                    });
+                    subscriber.error(
+                        new ErrorWithStatus(
+                            `no export with export_id ${id} found`,
+                            status.NOT_FOUND
+                        )
+                    );
+                    return;
+                }
+
+                if (exportRequest.status !== _ExportStatus_Values.DONE) {
+                    this.logger.error(
+                        "export with export_id has not been done yet",
+                        { exportId: id }
+                    );
+                    subscriber.error(
+                        new ErrorWithStatus(
+                            `export with export_id ${id} has not been done yet`,
+                            status.FAILED_PRECONDITION
+                        )
+                    );
+                    return;
+                }
+
+                const exportedFilePath = this.getExportedFilePath(
+                    exportRequest.exportedFilename
+                );
+                const exportedFileReadStream =
+                    createReadStream(exportedFilePath);
+                for await (const data of exportedFileReadStream) {
+                    if (data === null) {
+                        subscriber.complete();
+                        return;
+                    }
+                    subscriber.next(data);
+                }
+            })().then();
+        });
     }
 
     public async deleteExport(id: number): Promise<void> {
-        throw new Error("Method not implemented.");
+        await this.exportDM.deleteExport(id);
+    }
+
+    private getExportedFilePath(exportedFileFilename: string): string {
+        return join(this.applicationConfig.exportDir, exportedFileFilename);
     }
 }
 
-injected(ExportManagementOperatorImpl);
+injected(
+    ExportManagementOperatorImpl,
+    EXPORT_DATA_ACCESSOR_TOKEN,
+    APPLICATION_CONFIG_TOKEN,
+    TIMER_TOKEN,
+    LOGGER_TOKEN
+);
 
 export const EXPORT_MANAGEMENT_OPERATOR_TOKEN = token<ExportManagementOperator>(
     "ExportManagementOperator"

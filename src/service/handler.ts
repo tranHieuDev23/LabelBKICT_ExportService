@@ -7,6 +7,8 @@ import {
     EXPORT_MANAGEMENT_OPERATOR_TOKEN,
 } from "../module/export_management";
 
+const DEFAULT_GET_EXPORT_LIST_LIMIT = 10;
+
 export class ExportServiceHandlersFactory {
     constructor(
         private readonly exportManagementOperator: ExportManagementOperator
@@ -14,11 +16,114 @@ export class ExportServiceHandlersFactory {
 
     public getExportServiceHandlers(): ExportServiceHandlers {
         const handler: ExportServiceHandlers = {
-            CreateExport: async (call, callback) => {},
-            DeleteExport: async (call, callback) => {},
-            GetExport: async (call, callback) => {},
-            GetExportFile: async (call) => {},
-            GetExportList: async (call, callback) => {},
+            CreateExport: async (call, callback) => {
+                const req = call.request;
+                if (req.requestedByUserId === undefined) {
+                    return callback({
+                        message: "requested_by_user_id is required",
+                        code: status.INVALID_ARGUMENT,
+                    });
+                }
+                if (req.type === undefined) {
+                    return callback({
+                        message: "type is required",
+                        code: status.INVALID_ARGUMENT,
+                    });
+                }
+                const filterOptions = req.filterOptions || {};
+                try {
+                    const exportRequest =
+                        await this.exportManagementOperator.createExport(
+                            req.requestedByUserId,
+                            req.type,
+                            filterOptions
+                        );
+                    callback(null, { export: exportRequest });
+                } catch (e) {
+                    this.handleError(e, callback);
+                }
+            },
+
+            DeleteExport: async (call, callback) => {
+                const req = call.request;
+                if (req.id === undefined) {
+                    return callback({
+                        message: "id is required",
+                        code: status.INVALID_ARGUMENT,
+                    });
+                }
+                try {
+                    await this.exportManagementOperator.deleteExport(req.id);
+                    callback(null, {});
+                } catch (e) {
+                    this.handleError(e, callback);
+                }
+            },
+
+            GetExport: async (call, callback) => {
+                const req = call.request;
+                if (req.id === undefined) {
+                    return callback({
+                        message: "id is required",
+                        code: status.INVALID_ARGUMENT,
+                    });
+                }
+                try {
+                    const exportRequest =
+                        await this.exportManagementOperator.getExport(req.id);
+                    callback(null, { export: exportRequest });
+                } catch (e) {
+                    this.handleError(e, callback);
+                }
+            },
+
+            GetExportFile: async (call) => {
+                const req = call.request;
+                if (req.id === undefined) {
+                    call.destroy(
+                        new ErrorWithStatus(
+                            "id is required",
+                            status.INVALID_ARGUMENT
+                        )
+                    );
+                    return;
+                }
+
+                this.exportManagementOperator.getExportFile(req.id).subscribe({
+                    next: (data) => {
+                        call.write({ data });
+                    },
+                    error: (error) => {
+                        call.destroy(error);
+                    },
+                    complete: () => {
+                        call.destroy();
+                    },
+                });
+            },
+
+            GetExportList: async (call, callback) => {
+                const req = call.request;
+                if (req.requestedByUserId === undefined) {
+                    return callback({
+                        message: "requested_by_user_id is required",
+                        code: status.INVALID_ARGUMENT,
+                    });
+                }
+                const offset = req.offset || 0;
+                const limit = req.limit || DEFAULT_GET_EXPORT_LIST_LIMIT;
+                try {
+                    const { totalExportCount, exportList } =
+                        await this.exportManagementOperator.getExportList(
+                            req.requestedByUserId,
+                            offset,
+                            limit
+                        );
+                    callback(null, { totalExportCount, exportList });
+                } catch (e) {
+                    this.handleError(e, callback);
+                }
+            },
         };
         return handler;
     }
