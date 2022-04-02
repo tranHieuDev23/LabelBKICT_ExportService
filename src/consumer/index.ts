@@ -8,7 +8,7 @@ import {
     EXPORT_CREATED_MESSAGE_HANDLER_TOKEN,
 } from "./export_created";
 
-export * from "./export_created";
+export * from "./consumer";
 
 export function bindToContainer(container: Container): void {
     container

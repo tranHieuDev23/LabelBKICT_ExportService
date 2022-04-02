@@ -21,13 +21,15 @@ export class ExportServiceKafkaConsumer {
         private readonly logger: Logger
     ) {}
 
-    public async start(): Promise<void> {
-        await this.messageConsumer.registerHandlerListAndStart([
-            {
-                topic: TopicNameExportServiceExportCreated,
-                onMessage: (message) => this.onExportCreated(message),
-            },
-        ]);
+    public start(): void {
+        this.messageConsumer
+            .registerHandlerListAndStart([
+                {
+                    topic: TopicNameExportServiceExportCreated,
+                    onMessage: (message) => this.onExportCreated(message),
+                },
+            ])
+            .then();
     }
 
     private async onExportCreated(message: Buffer | null): Promise<void> {
