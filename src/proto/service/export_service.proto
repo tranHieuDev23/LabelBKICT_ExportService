@@ -28,7 +28,7 @@ message ImageListFilterOptions {
 }
 
 // Business objects
-message ExporType {
+message ExportType {
     enum Values {
         DATASET = 0;
         EXCEL = 1;
@@ -47,7 +47,7 @@ message Export {
     uint32 id = 1;
     uint32 requested_by_user_id = 2;
     uint64 request_time = 3;
-    ExporType.Values type = 4;
+    ExportType.Values type = 4;
     uint64 expire_time = 5;
     ImageListFilterOptions filter_options = 6;
     ExportStatus.Values status = 7;
@@ -57,7 +57,7 @@ message Export {
 // Request and response bodies of API calls
 message CreateExportRequest {
     uint32 requested_by_user_id = 1;
-    ExporType.Values type = 2;
+    ExportType.Values type = 2;
     ImageListFilterOptions filter_options = 3;
 }
 
