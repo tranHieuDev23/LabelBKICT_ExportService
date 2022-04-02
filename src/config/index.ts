@@ -2,6 +2,7 @@ import { Container } from "brandi";
 import { APPLICATION_CONFIG_TOKEN } from "./application";
 import { ExportServiceConfig, EXPORT_SERVICE_CONFIG_TOKEN } from "./config";
 import { DATABASE_CONFIG_TOKEN } from "./database";
+import { DISTRIBUTED_CONFIG_TOKEN } from "./distributed";
 import { GRPC_SERVER_CONFIG } from "./grpc_service";
 import { IMAGE_SERVICE_CONFIG_TOKEN } from "./image_service";
 import { KAFKA_CONFIG_TOKEN } from "./kafka";
@@ -15,6 +16,7 @@ export * from "./image_service";
 export * from "./user_service";
 export * from "./grpc_service";
 export * from "./application";
+export * from "./distributed";
 export * from "./config";
 
 export function bindToContainer(container: Container): void {
@@ -54,6 +56,12 @@ export function bindToContainer(container: Container): void {
         .bind(GRPC_SERVER_CONFIG)
         .toInstance(
             () => container.get(EXPORT_SERVICE_CONFIG_TOKEN).grpcServerConfig
+        )
+        .inSingletonScope();
+    container
+        .bind(DISTRIBUTED_CONFIG_TOKEN)
+        .toInstance(
+            () => container.get(EXPORT_SERVICE_CONFIG_TOKEN).distributedConfig
         )
         .inSingletonScope();
     container
