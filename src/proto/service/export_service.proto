@@ -66,7 +66,7 @@ message CreateExportResponse {
 }
 
 message GetExportListRequest {
-    uint32 of_user_id = 1;
+    uint32 requested_by_user_id = 1;
     uint32 offset = 2;
     uint32 limit = 3;
 }
