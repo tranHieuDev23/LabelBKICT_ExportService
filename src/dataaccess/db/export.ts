@@ -50,6 +50,7 @@ export interface ExportDataAccessor {
     ): Promise<Export[]>;
     getExport(id: number): Promise<Export | null>;
     getExportWithXLock(id: number): Promise<Export | null>;
+    updateExport(exp: Export): Promise<void>;
     deleteExport(id: number): Promise<void>;
     withTransaction<T>(
         executeFunc: (dm: ExportDataAccessor) => Promise<T>
@@ -204,6 +205,31 @@ export class ExportDataAccessorImpl implements ExportDataAccessor {
             return this.getExportFromRow(rows[0]);
         } catch (error) {
             this.logger.error("failed to get export", { error });
+            throw ErrorWithStatus.wrapWithStatus(error, status.INTERNAL);
+        }
+    }
+
+    public async updateExport(exp: Export): Promise<void> {
+        try {
+            await this.knex
+                .table(TabNameExportServiceExport)
+                .update({
+                    [ColNameExportServiceExportRequestedByUserId]:
+                        exp.requestedByUserId,
+                    [ColNameExportServiceExportRequestTime]: exp.requestTime,
+                    [ColNameExportServiceExportType]: exp.type,
+                    [ColNameExportServiceExportExpireTime]: exp.expireTime,
+                    [ColNameExportServiceExportFilterOptions]:
+                        this.binaryConverter.toBuffer(exp.filterOptions),
+                    [ColNameExportServiceExportStatus]: exp.status,
+                    [ColNameExportServiceExportExportedFileFilename]:
+                        exp.exportedFilename,
+                })
+                .where({
+                    [ColNameExportServiceExportExportId]: exp.id,
+                });
+        } catch (error) {
+            this.logger.error("failed to update export", { error });
             throw ErrorWithStatus.wrapWithStatus(error, status.INTERNAL);
         }
     }
