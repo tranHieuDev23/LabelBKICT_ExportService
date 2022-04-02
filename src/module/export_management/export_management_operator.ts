@@ -14,6 +14,11 @@ import { _ExportType_Values } from "../../proto/gen/ExportType";
 import { ImageListFilterOptions } from "../../proto/gen/ImageListFilterOptions";
 import { ErrorWithStatus, LOGGER_TOKEN, Timer, TIMER_TOKEN } from "../../utils";
 import { ApplicationConfig, APPLICATION_CONFIG_TOKEN } from "../../config";
+import {
+    ExportCreated,
+    ExportCreatedProducer,
+    EXPORT_CREATED_PRODUCER_TOKEN,
+} from "../../dataaccess/kafka";
 
 export interface ExportManagementOperator {
     createExport(
@@ -37,6 +42,7 @@ export interface ExportManagementOperator {
 export class ExportManagementOperatorImpl implements ExportManagementOperator {
     constructor(
         private readonly exportDM: ExportDataAccessor,
+        private readonly exportCreatedProducer: ExportCreatedProducer,
         private readonly applicationConfig: ApplicationConfig,
         private readonly timer: Timer,
         private readonly logger: Logger
@@ -48,25 +54,30 @@ export class ExportManagementOperatorImpl implements ExportManagementOperator {
         filterOptions: ImageListFilterOptions
     ): Promise<Export> {
         const currentTime = this.timer.getCurrentTime();
-        const exportId = await this.exportDM.createExport({
-            requestedByUserId: requestedByUserId,
-            type: type,
-            requestTime: currentTime,
-            filterOptions: filterOptions,
-            status: _ExportStatus_Values.REQUESTED,
-            expireTime: 0,
-            exportedFilename: "",
+        return this.exportDM.withTransaction(async (exportDM) => {
+            const exportId = await exportDM.createExport({
+                requestedByUserId: requestedByUserId,
+                type: type,
+                requestTime: currentTime,
+                filterOptions: filterOptions,
+                status: _ExportStatus_Values.REQUESTED,
+                expireTime: 0,
+                exportedFilename: "",
+            });
+            await this.exportCreatedProducer.createExportCreatedMessage(
+                new ExportCreated(exportId)
+            );
+            return {
+                id: exportId,
+                requestedByUserId: requestedByUserId,
+                type: type,
+                requestTime: currentTime,
+                filterOptions: filterOptions,
+                status: _ExportStatus_Values.REQUESTED,
+                expireTime: 0,
+                exportedFileFilename: "",
+            };
         });
-        return {
-            id: exportId,
-            requestedByUserId: requestedByUserId,
-            type: type,
-            requestTime: currentTime,
-            filterOptions: filterOptions,
-            status: _ExportStatus_Values.REQUESTED,
-            expireTime: 0,
-            exportedFileFilename: "",
-        };
     }
 
     public async getExportList(
@@ -162,6 +173,7 @@ export class ExportManagementOperatorImpl implements ExportManagementOperator {
 injected(
     ExportManagementOperatorImpl,
     EXPORT_DATA_ACCESSOR_TOKEN,
+    EXPORT_CREATED_PRODUCER_TOKEN,
     APPLICATION_CONFIG_TOKEN,
     TIMER_TOKEN,
     LOGGER_TOKEN
