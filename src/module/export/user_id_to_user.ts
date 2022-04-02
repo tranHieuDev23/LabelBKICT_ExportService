@@ -14,10 +14,13 @@ export class UserIdToUserConverterImpl implements UserIdToUserConverter {
             return null;
         }
         const userProto = await this.userInfoProvider.getUser(userId);
+        if (userProto === null) {
+            return null;
+        }
         return new User(
-            userProto?.id || 0,
-            userProto?.username || "",
-            userProto?.displayName || ""
+            userProto.id || 0,
+            userProto.username || "",
+            userProto.displayName || ""
         );
     }
 }
