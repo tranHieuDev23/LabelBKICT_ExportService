@@ -31,7 +31,8 @@ export class ExportCreatedProducerImpl implements ExportCreatedProducer {
         message: ExportCreated
     ): Promise<void> {
         try {
-            this.producer.send({
+            await this.producer.connect();
+            await this.producer.send({
                 topic: TopicNameExportServiceExportCreated,
                 messages: [
                     {

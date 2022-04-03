@@ -146,7 +146,7 @@ export class ExportManagementOperatorImpl implements ExportManagementOperator {
                 }
 
                 const exportedFilePath = this.getExportedFilePath(
-                    exportRequest.exportedFilename
+                    exportRequest.exportedFileFilename
                 );
                 const exportedFileReadStream =
                     createReadStream(exportedFilePath);

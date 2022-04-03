@@ -124,7 +124,7 @@ export class ExcelExporterImpl implements ExcelExporter {
     private async getExportedFilename(): Promise<string> {
         const currentTime = this.timer.getCurrentTime();
         const id = await this.idGenerator.generate();
-        return `Dataset-${currentTime}-${id}.xlsx`;
+        return `Dataset Information-${currentTime}-${id}.xlsx`;
     }
 
     private getImageInformationWorkbook(): {
@@ -132,7 +132,7 @@ export class ExcelExporterImpl implements ExcelExporter {
         worksheet: Worksheet;
     } {
         const workbook = new Workbook();
-        const worksheet = workbook.addWorksheet("Images Information");
+        const worksheet = workbook.addWorksheet("Dataset Information");
         worksheet.columns = EXCEL_COLUMN_LIST;
         return { workbook, worksheet };
     }
@@ -172,9 +172,9 @@ export class ExcelExporterImpl implements ExcelExporter {
             uploadedByUser: uploadedByUser?.displayName || "",
             uploadTime: uploadTime.toLocaleString(),
             publishedByUser: publishedByUser?.displayName || "",
-            publishTime: publishTime.toLocaleString(),
+            publishTime: publishedByUser ? publishTime.toLocaleString() : "",
             verifiedByUser: verifiedByUser?.displayName || "",
-            verifyTime: verifyTime.toLocaleString(),
+            verifyTime: verifiedByUser ? verifyTime.toLocaleString() : "",
             imageType,
             status,
             regionLabels,

@@ -21,6 +21,7 @@ import {
 } from "../../utils";
 import { DatasetExporter, DATASET_EXPORTER_TOKEN } from "./dataset_exporter";
 import { ExcelExporter, EXCEL_EXPORTER_TOKEN } from "./excel_exporter";
+import { _ImageListSortOrder_Values } from "../../proto/gen/ImageListSortOrder";
 
 export interface ExportOperator {
     processExport(id: number): Promise<void>;
@@ -57,7 +58,7 @@ export class ExportOperatorImpl implements ExportOperator {
                 }
 
                 exportRequest.status = _ExportStatus_Values.PROCESSING;
-                await this.exportDM.updateExport(exportRequest);
+                await exportDM.updateExport(exportRequest);
                 return exportRequest;
             }
         );
@@ -65,10 +66,18 @@ export class ExportOperatorImpl implements ExportOperator {
             return;
         }
 
+        this.logger.info("export request found", {
+            exportId: id,
+            exportRequest,
+        });
+
         const { imageList, imageTagList, regionList } =
             await this.getImageListBatched(exportRequest.filterOptions);
+        this.logger.info("retrieved image information", {
+            imageCount: imageList.length,
+        });
 
-        const exportedFilename =
+        const exportedFileFilename =
             exportRequest.type === _ExportType_Values.DATASET
                 ? await this.datasetExporter.generateExportFile(
                       imageList,
@@ -80,6 +89,9 @@ export class ExportOperatorImpl implements ExportOperator {
                       imageTagList,
                       regionList
                   );
+        this.logger.info("successfully generated export file", {
+            exportedFileFilename,
+        });
 
         const expireTime =
             this.timer.getCurrentTime() +
@@ -103,9 +115,9 @@ export class ExportOperatorImpl implements ExportOperator {
             }
 
             exportRequest.status = _ExportStatus_Values.DONE;
-            exportRequest.exportedFilename = exportedFilename;
+            exportRequest.exportedFileFilename = exportedFileFilename;
             exportRequest.expireTime = expireTime;
-            await this.exportDM.updateExport(exportRequest);
+            await exportDM.updateExport(exportRequest);
         });
     }
 
@@ -126,6 +138,7 @@ export class ExportOperatorImpl implements ExportOperator {
                 await promisifyGRPCCall(
                     this.imageServiceDM.getImageList.bind(this.imageServiceDM),
                     {
+                        sortOrder: _ImageListSortOrder_Values.ID_ASCENDING,
                         filterOptions: filterOptions,
                         offset: currentOffset,
                         limit: this.applicationConfig.getImageListBatchSize,

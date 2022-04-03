@@ -22,7 +22,7 @@ export class Export {
         public expireTime: number,
         public filterOptions: ImageListFilterOptions,
         public status: _ExportStatus_Values,
-        public exportedFilename: string
+        public exportedFileFilename: string
     ) {}
 }
 
@@ -235,7 +235,7 @@ export class ExportDataAccessorImpl implements ExportDataAccessor {
                         this.binaryConverter.toBuffer(exp.filterOptions),
                     [ColNameExportServiceExportStatus]: exp.status,
                     [ColNameExportServiceExportExportedFileFilename]:
-                        exp.exportedFilename,
+                        exp.exportedFileFilename,
                 })
                 .where({
                     [ColNameExportServiceExportExportId]: exp.id,

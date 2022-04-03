@@ -5,8 +5,8 @@ export class GRPCServerConfig {
 
     public static fromEnv(): GRPCServerConfig {
         const config = new GRPCServerConfig();
-        if (process.env.IMAGE_SERVICE_PORT !== undefined) {
-            config.port = +process.env.IMAGE_SERVICE_PORT;
+        if (process.env.EXPORT_SERVICE_PORT !== undefined) {
+            config.port = +process.env.EXPORT_SERVICE_PORT;
         }
         return config;
     }
