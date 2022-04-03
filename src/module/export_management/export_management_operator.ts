@@ -1,5 +1,6 @@
 import { createReadStream } from "fs";
 import { join } from "path";
+import { Readable } from "stream";
 import { status } from "@grpc/grpc-js";
 import { injected, token } from "brandi";
 import { Observable } from "rxjs";
@@ -35,7 +36,7 @@ export interface ExportManagementOperator {
         exportList: Export[];
     }>;
     getExport(id: number): Promise<Export>;
-    getExportFile(id: number): Observable<Buffer>;
+    getExportFile(id: number): Promise<Readable>;
     deleteExport(id: number): Promise<void>;
 }
 
@@ -114,51 +115,30 @@ export class ExportManagementOperatorImpl implements ExportManagementOperator {
         return exportRequest;
     }
 
-    public getExportFile(id: number): Observable<Buffer> {
-        return new Observable<Buffer>((subscriber) => {
-            (async () => {
-                const exportRequest = await this.exportDM.getExport(id);
-                if (exportRequest === null) {
-                    this.logger.error("no export with export_id found", {
-                        exportId: id,
-                    });
-                    subscriber.error(
-                        new ErrorWithStatus(
-                            `no export with export_id ${id} found`,
-                            status.NOT_FOUND
-                        )
-                    );
-                    return;
-                }
-
-                if (exportRequest.status !== _ExportStatus_Values.DONE) {
-                    this.logger.error(
-                        "export with export_id has not been done yet",
-                        { exportId: id }
-                    );
-                    subscriber.error(
-                        new ErrorWithStatus(
-                            `export with export_id ${id} has not been done yet`,
-                            status.FAILED_PRECONDITION
-                        )
-                    );
-                    return;
-                }
-
-                const exportedFilePath = this.getExportedFilePath(
-                    exportRequest.exportedFileFilename
-                );
-                const exportedFileReadStream =
-                    createReadStream(exportedFilePath);
-                for await (const data of exportedFileReadStream) {
-                    if (data === null) {
-                        subscriber.complete();
-                        return;
-                    }
-                    subscriber.next(data);
-                }
-            })().then();
-        });
+    public async getExportFile(id: number): Promise<Readable> {
+        const exportRequest = await this.exportDM.getExport(id);
+        if (exportRequest === null) {
+            this.logger.error("no export with export_id found", {
+                exportId: id,
+            });
+            throw new ErrorWithStatus(
+                `no export with export_id ${id} found`,
+                status.NOT_FOUND
+            );
+        }
+        if (exportRequest.status !== _ExportStatus_Values.DONE) {
+            this.logger.error("export with export_id has not been done yet", {
+                exportId: id,
+            });
+            throw new ErrorWithStatus(
+                `export with export_id ${id} has not been done yet`,
+                status.FAILED_PRECONDITION
+            );
+        }
+        const exportedFilePath = this.getExportedFilePath(
+            exportRequest.exportedFileFilename
+        );
+        return createReadStream(exportedFilePath);
     }
 
     public async deleteExport(id: number): Promise<void> {

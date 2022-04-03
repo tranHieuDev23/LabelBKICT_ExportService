@@ -84,17 +84,17 @@ export class ExportServiceHandlersFactory {
                     );
                     return;
                 }
-
-                this.exportManagementOperator.getExportFile(req.id).subscribe({
-                    next: (data) => {
-                        call.write({ data });
-                    },
-                    error: (error) => {
-                        call.destroy(error);
-                    },
-                    complete: () => {
-                        call.destroy();
-                    },
+                const exportedFileStream =
+                    await this.exportManagementOperator.getExportFile(req.id);
+                exportedFileStream.on("data", (chunk) => {
+                    console.log("writing chunk", chunk);
+                    call.write({ data: chunk });
+                });
+                exportedFileStream.on("error", (error) => {
+                    call.destroy(error);
+                });
+                exportedFileStream.on("close", () => {
+                    call.end();
                 });
             },
 
