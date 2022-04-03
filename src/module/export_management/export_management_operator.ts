@@ -3,7 +3,6 @@ import { join } from "path";
 import { Readable } from "stream";
 import { status } from "@grpc/grpc-js";
 import { injected, token } from "brandi";
-import { Observable } from "rxjs";
 import { Logger } from "winston";
 import {
     ExportDataAccessor,
