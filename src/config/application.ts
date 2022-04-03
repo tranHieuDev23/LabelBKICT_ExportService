@@ -6,6 +6,7 @@ export class ApplicationConfig {
     public originalImageDir = "originals";
     public exportDir = "exports";
     public exportExpireTime = ONE_WEEK;
+    public getImageListBatchSize = 100;
 
     public static fromEnv(): ApplicationConfig {
         const config = new ApplicationConfig();
@@ -17,6 +18,10 @@ export class ApplicationConfig {
         }
         if (process.env.EXPORT_EXPIRE_TIME !== undefined) {
             config.exportExpireTime = +process.env.EXPORT_EXPIRE_TIME;
+        }
+        if (process.env.EXPORT_GET_IMAGE_LIST_BATCH_SIZE !== undefined) {
+            config.getImageListBatchSize =
+                +process.env.EXPORT_GET_IMAGE_LIST_BATCH_SIZE;
         }
         return config;
     }

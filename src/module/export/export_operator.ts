@@ -8,6 +8,10 @@ import {
 import { IMAGE_SERVICE_DM_TOKEN } from "../../dataaccess/grpc";
 import { _ExportStatus_Values } from "../../proto/gen/ExportStatus";
 import { _ExportType_Values } from "../../proto/gen/ExportType";
+import { ImageListFilterOptions } from "../../proto/gen/ImageListFilterOptions";
+import { Image } from "../../proto/gen/Image";
+import { ImageTag } from "../../proto/gen/ImageTag";
+import { Region } from "../../proto/gen/Region";
 import { ImageServiceClient } from "../../proto/gen/ImageService";
 import {
     LOGGER_TOKEN,
@@ -61,46 +65,22 @@ export class ExportOperatorImpl implements ExportOperator {
             return;
         }
 
-        const { error: getImageListError, response: getImageListResponse } =
-            await promisifyGRPCCall(
-                this.imageServiceDM.getImageList.bind(this.imageServiceDM),
-                {
-                    filterOptions: exportRequest.filterOptions,
-                    withImageTag: true,
-                    withRegion: true,
-                }
-            );
-        if (getImageListError !== null) {
-            this.logger.error("failed to call image_list.getImageList()", {
-                error: getImageListError,
-            });
-            throw getImageListError;
-        }
-
-        const imageProtoList = getImageListResponse?.imageList || [];
-        const imageTagListOfImageList =
-            getImageListResponse?.imageTagListOfImageList || [];
-        const imageTagProtoList = imageTagListOfImageList.map(
-            (imageTagList) => imageTagList.imageTagList || []
-        );
-        const regionListOfImageList =
-            getImageListResponse?.regionListOfImageList || [];
-        const regionProtoList = regionListOfImageList.map(
-            (regionList) => regionList.regionList || []
-        );
+        const { imageList, imageTagList, regionList } =
+            await this.getImageListBatched(exportRequest.filterOptions);
 
         const exportedFilename =
             exportRequest.type === _ExportType_Values.DATASET
                 ? await this.datasetExporter.generateExportFile(
-                      imageProtoList,
-                      imageTagProtoList,
-                      regionProtoList
+                      imageList,
+                      imageTagList,
+                      regionList
                   )
                 : await this.excelExporter.generateExportFile(
-                      imageProtoList,
-                      imageTagProtoList,
-                      regionProtoList
+                      imageList,
+                      imageTagList,
+                      regionList
                   );
+
         const expireTime =
             this.timer.getCurrentTime() +
             this.applicationConfig.exportExpireTime;
@@ -127,6 +107,59 @@ export class ExportOperatorImpl implements ExportOperator {
             exportRequest.expireTime = expireTime;
             await this.exportDM.updateExport(exportRequest);
         });
+    }
+
+    private async getImageListBatched(
+        filterOptions: ImageListFilterOptions
+    ): Promise<{
+        imageList: Image[];
+        imageTagList: ImageTag[][];
+        regionList: Region[][];
+    }> {
+        const imageList: Image[] = [];
+        const imageTagList: ImageTag[][] = [];
+        const regionList: Region[][] = [];
+
+        let currentOffset = 0;
+        while (true) {
+            const { error: getImageListError, response: getImageListResponse } =
+                await promisifyGRPCCall(
+                    this.imageServiceDM.getImageList.bind(this.imageServiceDM),
+                    {
+                        filterOptions: filterOptions,
+                        offset: currentOffset,
+                        limit: this.applicationConfig.getImageListBatchSize,
+                        withImageTag: true,
+                        withRegion: true,
+                    }
+                );
+            if (getImageListError !== null) {
+                this.logger.error("failed to call image_list.getImageList()", {
+                    error: getImageListError,
+                });
+                throw getImageListError;
+            }
+
+            const batchImageList = getImageListResponse?.imageList || [];
+            if (batchImageList.length === 0) {
+                break;
+            }
+            imageList.push(...batchImageList);
+            getImageListResponse?.imageTagListOfImageList?.forEach(
+                (batchImageTagList) => {
+                    imageTagList.push(batchImageTagList.imageTagList || []);
+                }
+            );
+            getImageListResponse?.regionListOfImageList?.forEach(
+                (batchRegionList) => {
+                    regionList.push(batchRegionList.regionList || []);
+                }
+            );
+
+            currentOffset += batchImageList.length;
+        }
+
+        return { imageList, imageTagList, regionList };
     }
 }
 
