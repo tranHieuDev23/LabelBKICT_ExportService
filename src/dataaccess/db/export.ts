@@ -156,7 +156,8 @@ export class ExportDataAccessorImpl implements ExportDataAccessor {
                     );
                 })
                 .offset(offset)
-                .limit(limit);
+                .limit(limit)
+                .orderBy(ColNameExportServiceExportRequestTime, "desc");
             return rows.map((row) => this.getExportFromRow(row));
         } catch (error) {
             this.logger.error("failed to get export list", { error });
