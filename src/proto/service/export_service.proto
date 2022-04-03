@@ -49,7 +49,6 @@ message Export {
     uint64 request_time = 3;
     ExportType.Values type = 4;
     uint64 expire_time = 5;
-    ImageListFilterOptions filter_options = 6;
     ExportStatus.Values status = 7;
     string exported_file_filename = 8;
 }
