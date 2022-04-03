@@ -4,6 +4,7 @@ import * as utils from "../utils";
 import * as config from "../config";
 import * as grpc from "../dataaccess/grpc";
 import * as db from "../dataaccess/db";
+import * as kafka from "../dataaccess/kafka";
 import * as modules from "../module";
 import * as service from "../service";
 
@@ -17,6 +18,7 @@ export function startGRPCServer(dotenvPath: string) {
     config.bindToContainer(container);
     grpc.bindToContainer(container);
     db.bindToContainer(container);
+    kafka.bindToContainer(container);
     modules.bindToContainer(container);
     service.bindToContainer(container);
 
