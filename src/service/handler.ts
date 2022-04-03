@@ -6,6 +6,7 @@ import {
     ExportManagementOperator,
     EXPORT_MANAGEMENT_OPERATOR_TOKEN,
 } from "../module/export_management";
+import { _ExportType_Values } from "../proto/gen/ExportType";
 
 const DEFAULT_GET_EXPORT_LIST_LIMIT = 10;
 
@@ -24,18 +25,13 @@ export class ExportServiceHandlersFactory {
                         code: status.INVALID_ARGUMENT,
                     });
                 }
-                if (req.type === undefined) {
-                    return callback({
-                        message: "type is required",
-                        code: status.INVALID_ARGUMENT,
-                    });
-                }
+                const type = req.type || _ExportType_Values.DATASET;
                 const filterOptions = req.filterOptions || {};
                 try {
                     const exportRequest =
                         await this.exportManagementOperator.createExport(
                             req.requestedByUserId,
-                            req.type,
+                            type,
                             filterOptions
                         );
                     callback(null, { export: exportRequest });
