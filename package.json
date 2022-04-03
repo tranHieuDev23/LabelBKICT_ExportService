@@ -7,14 +7,16 @@
     "api-knex": "TS_NODE_COMPILER_OPTIONS='{ \"module\": \"commonjs\" }' knex --knexfile=./knexfile.ts",
     "build": "npm run generate && tsc --build",
     "clean": "rm -r ./src/proto/gen && tsc --build --clean",
-    "debug": "npm run build && npm run watch",
+    "debug-grpc": "npm run build && npm run watch-grpc",
+    "debug-kafka": "npm run build && npm run watch-kafka",
     "generate": "./node_modules/.bin/proto-loader-gen-types --longs=Number --enums=Number --oneofs --grpcLib=@grpc/grpc-js --outDir=src/proto/gen src/proto/**/*.proto",
     "lint": "npx eslint ./src --ext .js,.jsx,.ts,.tsx",
     "serve": "node dist/main.js",
     "start": "node dist/main.js --prod",
     "watch-node": "nodemon --ignore \"logs/**\" --delay 1s --inspect dist/main.js",
     "watch-ts": "tsc -w",
-    "watch": "concurrently -k -p \"[{name}]\" -n \"TypeScript,Node\" -c \"yellow.bold,cyan.bold,green.bold\" \"npm run watch-ts\" \"npm run watch-node\""
+    "watch-grpc": "concurrently -k -p \"[{name}]\" -n \"TypeScript,Node\" -c \"yellow.bold,cyan.bold,green.bold\" \"npm run watch-ts\" \"npm run watch-node start_grpc_server\"",
+    "watch-kafka": "concurrently -k -p \"[{name}]\" -n \"TypeScript,Node\" -c \"yellow.bold,cyan.bold,green.bold\" \"npm run watch-ts\" \"npm run watch-node start_kafka_consumer\""
   },
   "author": "tranhieu23.code@outlook.com",
   "license": "MIT",
