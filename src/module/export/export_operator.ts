@@ -133,6 +133,7 @@ export class ExportOperatorImpl implements ExportOperator {
         const regionList: Region[][] = [];
 
         let currentOffset = 0;
+        // eslint-disable-next-line no-constant-condition
         while (true) {
             const { error: getImageListError, response: getImageListResponse } =
                 await promisifyGRPCCall(
