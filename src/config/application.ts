@@ -9,8 +9,8 @@ export class ApplicationConfig {
 
     public static fromEnv(): ApplicationConfig {
         const config = new ApplicationConfig();
-        if (process.env.EPXORT_ORGINAL_IMAGE_DIR !== undefined) {
-            config.originalImageDir = process.env.EPXORT_ORGINAL_IMAGE_DIR;
+        if (process.env.EXPORT_ORIGINAL_IMAGE_DIR !== undefined) {
+            config.originalImageDir = process.env.EXPORT_ORIGINAL_IMAGE_DIR;
         }
         if (process.env.EXPORT_DIR !== undefined) {
             config.exportDir = process.env.EXPORT_DIR;
