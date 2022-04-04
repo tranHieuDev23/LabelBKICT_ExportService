@@ -87,7 +87,6 @@ export class ExportServiceHandlersFactory {
                 const exportedFileStream =
                     await this.exportManagementOperator.getExportFile(req.id);
                 exportedFileStream.on("data", (chunk) => {
-                    console.log("writing chunk", chunk);
                     call.write({ data: chunk });
                 });
                 exportedFileStream.on("error", (error) => {
