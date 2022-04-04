@@ -3,7 +3,12 @@ import { Logger } from "winston";
 import { Archiver, create } from "archiver";
 import { createWriteStream } from "fs";
 import { join } from "path";
-import { ApplicationConfig, APPLICATION_CONFIG_TOKEN } from "../../config";
+import {
+    ApplicationConfig,
+    APPLICATION_CONFIG_TOKEN,
+    ImageServiceConfig,
+    IMAGE_SERVICE_CONFIG_TOKEN,
+} from "../../config";
 import { Image as ImageProto } from "../../proto/gen/Image";
 import { ImageTag as ImageTagProto } from "../../proto/gen/ImageTag";
 import { Region as RegionProto } from "../../proto/gen/Region";
@@ -37,6 +42,7 @@ export class DatasetExporterImpl implements DatasetExporter {
         private readonly imageProtoToImageConverter: ImageProtoToImageConverter,
         private readonly regionProtoToRegionConverter: RegionProtoToRegionConverter,
         private readonly applicationConfig: ApplicationConfig,
+        private readonly imageServiceConfig: ImageServiceConfig,
         private readonly timer: Timer,
         private readonly idGenerator: IdGenerator,
         private readonly logger: Logger
@@ -160,7 +166,7 @@ export class DatasetExporterImpl implements DatasetExporter {
 
     private getOriginalImageFilePath(originalImageFilename: string): string {
         return join(
-            this.applicationConfig.originalImageDir,
+            this.imageServiceConfig.originalImageDir,
             originalImageFilename
         );
     }
@@ -179,6 +185,7 @@ injected(
     IMAGE_PROTO_TO_IMAGE_CONVERTER_TOKEN,
     REGION_PROTO_TO_REGION_CONVERTER_TOKEN,
     APPLICATION_CONFIG_TOKEN,
+    IMAGE_SERVICE_CONFIG_TOKEN,
     TIMER_TOKEN,
     ID_GENERATOR_TOKEN,
     LOGGER_TOKEN
