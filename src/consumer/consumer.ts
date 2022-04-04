@@ -29,7 +29,11 @@ export class ExportServiceKafkaConsumer {
                     onMessage: (message) => this.onExportCreated(message),
                 },
             ])
-            .then();
+            .then(() => {
+                if (process.send) {
+                    process.send("ready");
+                }
+            });
     }
 
     private async onExportCreated(message: Buffer | null): Promise<void> {

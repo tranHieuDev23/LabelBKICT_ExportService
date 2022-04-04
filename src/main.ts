@@ -1,10 +1,12 @@
-import { program } from "commander";
+import minimist from "minimist";
 import { startGRPCServer } from "./cmd/start_grpc_server";
 import { startKafkaConsumer } from "./cmd/start_kafka_consumer";
 
-program.command("start_grpc_server").action(() => startGRPCServer(".env"));
-program
-    .command("start_kafka_consumer")
-    .action(() => startKafkaConsumer(".env"));
-
-program.parse();
+const args = minimist(process.argv);
+if (args["start_grpc_server"]) {
+    startGRPCServer("./env");
+} else if (args["start_kafka_consumer"]) {
+    startKafkaConsumer(".env");
+} else {
+    console.log("no component was selected, exiting...");
+}
