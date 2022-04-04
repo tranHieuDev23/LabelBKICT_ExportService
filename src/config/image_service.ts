@@ -17,9 +17,9 @@ export class ImageServiceConfig {
         if (process.env.IMAGE_SERVICE_PORT !== undefined) {
             config.port = +process.env.IMAGE_SERVICE_PORT;
         }
-        if (process.env.EXPORT_SERVICE_ORIGINAL_IMAGE_DIR !== undefined) {
+        if (process.env.IMAGE_SERVICE_ORIGINAL_IMAGE_DIR !== undefined) {
             config.originalImageDir =
-                process.env.EXPORT_SERVICE_ORIGINAL_IMAGE_DIR;
+                process.env.IMAGE_SERVICE_ORIGINAL_IMAGE_DIR;
         }
         return config;
     }
