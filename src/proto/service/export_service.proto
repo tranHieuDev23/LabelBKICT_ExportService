@@ -25,6 +25,7 @@ message ImageListFilterOptions {
     repeated uint32 image_status_list = 14;
     bool must_match_all_image_tags = 15;
     bool must_match_all_region_labels = 16;
+    repeated uint32 bookmarked_by_user_id_list = 17;
 }
 
 // Business objects
