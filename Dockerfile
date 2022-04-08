@@ -11,4 +11,4 @@ RUN npm run build
 # Start the server with 16 instances
 ENV NODE_ENV=production
 EXPOSE 20002
-ENTRYPOINT ["./scripts/start_grpc_service.sh"] 
+ENTRYPOINT ["./scripts/start_grpc_service.sh"]
