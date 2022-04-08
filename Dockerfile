@@ -8,9 +8,7 @@ RUN npm install -g pm2
 # Build package
 COPY . .
 RUN npm run build
-# Initialize database
-RUN npm run api-knex migrate:latest
 # Start the server with 16 instances
 ENV NODE_ENV=production
 EXPOSE 20002
-ENTRYPOINT ["pm2-runtime", "start", "ecosystem.config.js"] 
+ENTRYPOINT ["./scripts/start_grpc_service.sh"] 
