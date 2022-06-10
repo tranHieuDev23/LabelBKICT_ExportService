@@ -103,7 +103,7 @@ export class ExportOperatorImpl implements ExportOperator {
                 this.logger.error("no export with export_id found", {
                     exportId: id,
                 });
-                return null;
+                return;
             }
 
             if (exportRequest.status === _ExportStatus_Values.DONE) {
@@ -111,7 +111,7 @@ export class ExportOperatorImpl implements ExportOperator {
                     "export with export_id already has status of done",
                     { exportId: id }
                 );
-                return null;
+                return;
             }
 
             exportRequest.status = _ExportStatus_Values.DONE;
