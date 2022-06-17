@@ -23,6 +23,12 @@ import { DatasetExporter, DATASET_EXPORTER_TOKEN } from "./dataset_exporter";
 import { ExcelExporter, EXCEL_EXPORTER_TOKEN } from "./excel_exporter";
 import { _ImageListSortOrder_Values } from "../../proto/gen/ImageListSortOrder";
 
+export class ExportNotFoundException extends Error {
+    constructor() {
+        super("no export with the provided export_id found");
+    }
+}
+
 export interface ExportOperator {
     processExport(id: number): Promise<void>;
 }
@@ -46,7 +52,7 @@ export class ExportOperatorImpl implements ExportOperator {
                     this.logger.error("no export with export_id found", {
                         exportId: id,
                     });
-                    return null;
+                    throw new ExportNotFoundException();
                 }
 
                 if (exportRequest.status === _ExportStatus_Values.DONE) {
