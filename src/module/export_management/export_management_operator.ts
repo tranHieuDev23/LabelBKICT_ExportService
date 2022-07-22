@@ -54,30 +54,30 @@ export class ExportManagementOperatorImpl implements ExportManagementOperator {
         filterOptions: ImageListFilterOptions
     ): Promise<Export> {
         const currentTime = this.timer.getCurrentTime();
-        return this.exportDM.withTransaction(async (exportDM) => {
-            const exportId = await exportDM.createExport({
-                requestedByUserId: requestedByUserId,
-                type: type,
-                requestTime: currentTime,
-                filterOptions: filterOptions,
-                status: _ExportStatus_Values.REQUESTED,
-                expireTime: 0,
-                exportedFilename: "",
-            });
-            await this.exportCreatedProducer.createExportCreatedMessage(
-                new ExportCreated(exportId)
-            );
-            return {
-                id: exportId,
-                requestedByUserId: requestedByUserId,
-                type: type,
-                requestTime: currentTime,
-                filterOptions: filterOptions,
-                status: _ExportStatus_Values.REQUESTED,
-                expireTime: 0,
-                exportedFileFilename: "",
-            };
+
+        const exportId = await this.exportDM.createExport({
+            requestedByUserId: requestedByUserId,
+            type: type,
+            requestTime: currentTime,
+            filterOptions: filterOptions,
+            status: _ExportStatus_Values.REQUESTED,
+            expireTime: 0,
+            exportedFilename: "",
         });
+
+        await this.exportCreatedProducer.createExportCreatedMessage(
+            new ExportCreated(exportId)
+        );
+
+        return {
+            id: exportId,
+            requestedByUserId: requestedByUserId,
+            type: type,
+            requestTime: currentTime,
+            status: _ExportStatus_Values.REQUESTED,
+            expireTime: 0,
+            exportedFileFilename: "",
+        };
     }
 
     public async getExportList(
