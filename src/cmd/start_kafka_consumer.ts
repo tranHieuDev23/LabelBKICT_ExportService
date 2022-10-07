@@ -4,6 +4,7 @@ import * as utils from "../utils";
 import * as config from "../config";
 import * as grpc from "../dataaccess/grpc";
 import * as db from "../dataaccess/db";
+import * as elasticsearch from "../dataaccess/elasticsearch";
 import * as kafka from "../dataaccess/kafka";
 import * as modules from "../module";
 import * as consumer from "../consumer";
@@ -18,13 +19,12 @@ export function startKafkaConsumer(dotenvPath: string) {
     config.bindToContainer(container);
     grpc.bindToContainer(container);
     db.bindToContainer(container);
+    elasticsearch.bindToContainer(container);
     kafka.bindToContainer(container);
     modules.bindToContainer(container);
     consumer.bindToContainer(container);
 
-    const kafkaConsumer = container.get(
-        consumer.EXPORT_SERVICE_KAFKA_CONSUMER_TOKEN
-    );
+    const kafkaConsumer = container.get(consumer.EXPORT_SERVICE_KAFKA_CONSUMER_TOKEN);
 
     kafkaConsumer.start();
 }
