@@ -11,17 +11,13 @@ export interface UserInfoProvider {
 }
 
 export class UserInfoProviderImpl implements UserInfoProvider {
-    constructor(
-        private readonly userServiceDM: UserServiceClient,
-        private readonly logger: Logger
-    ) {}
+    constructor(private readonly userServiceDM: UserServiceClient, private readonly logger: Logger) {}
 
     public async getUser(userId: number): Promise<User | null> {
-        const { error: getUserError, response: getUserResponse } =
-            await promisifyGRPCCall(
-                this.userServiceDM.getUser.bind(this.userServiceDM),
-                { id: userId }
-            );
+        const { error: getUserError, response: getUserResponse } = await promisifyGRPCCall(
+            this.userServiceDM.getUser.bind(this.userServiceDM),
+            { id: userId }
+        );
         if (getUserError !== null) {
             if (getUserError.code === status.NOT_FOUND) {
                 return null;
@@ -44,5 +40,4 @@ export class UserInfoProviderImpl implements UserInfoProvider {
 
 injected(UserInfoProviderImpl, USER_SERVICE_DM_TOKEN, LOGGER_TOKEN);
 
-export const USER_INFO_PROVIDER_TOKEN =
-    token<UserInfoProvider>("UserInfoProvider");
+export const USER_INFO_PROVIDER_TOKEN = token<UserInfoProvider>("UserInfoProvider");

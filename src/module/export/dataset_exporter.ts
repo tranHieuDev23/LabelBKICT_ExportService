@@ -12,29 +12,19 @@ import {
 import { Image as ImageProto } from "../../proto/gen/Image";
 import { ImageTag as ImageTagProto } from "../../proto/gen/ImageTag";
 import { Region as RegionProto } from "../../proto/gen/Region";
-import {
-    IdGenerator,
-    ID_GENERATOR_TOKEN,
-    LOGGER_TOKEN,
-    Timer,
-    TIMER_TOKEN,
-} from "../../utils";
-import {
-    ImageProtoToImageConverter,
-    IMAGE_PROTO_TO_IMAGE_CONVERTER_TOKEN,
-} from "./image_proto_to_image";
-import {
-    RegionProtoToRegionConverter,
-    REGION_PROTO_TO_REGION_CONVERTER_TOKEN,
-} from "./region_proto_to_region";
+import { IdGenerator, ID_GENERATOR_TOKEN, LOGGER_TOKEN, Timer, TIMER_TOKEN } from "../../utils";
+import { ImageProtoToImageConverter, IMAGE_PROTO_TO_IMAGE_CONVERTER_TOKEN } from "./image_proto_to_image";
+import { RegionProtoToRegionConverter, REGION_PROTO_TO_REGION_CONVERTER_TOKEN } from "./region_proto_to_region";
 import { ImageTag } from "./dataset_metadata_models";
 
+export interface DatasetExporterArguments {
+    imageList: ImageProto[];
+    imageTagList: ImageTagProto[][];
+    regionList: RegionProto[][];
+}
+
 export interface DatasetExporter {
-    generateExportFile(
-        imageList: ImageProto[],
-        imageTagList: ImageTagProto[][],
-        regionList: RegionProto[][]
-    ): Promise<string>;
+    generateExportFile(args: DatasetExporterArguments): Promise<string>;
 }
 
 export class DatasetExporterImpl implements DatasetExporter {
@@ -48,20 +38,12 @@ export class DatasetExporterImpl implements DatasetExporter {
         private readonly logger: Logger
     ) {}
 
-    public async generateExportFile(
-        imageProtoList: ImageProto[],
-        imageTagProtoList: ImageTagProto[][],
-        regionProtoList: RegionProto[][]
-    ): Promise<string> {
+    public async generateExportFile(args: DatasetExporterArguments): Promise<string> {
+        const { imageList, imageTagList, regionList } = args;
         const exportedFilename = await this.getExportedFilename();
         const archiver = this.getArchiver(exportedFilename);
-        for (let i = 0; i < imageProtoList.length; i++) {
-            await this.addImageToArchive(
-                archiver,
-                imageProtoList[i],
-                imageTagProtoList[i],
-                regionProtoList[i]
-            );
+        for (let i = 0; i < imageList.length; i++) {
+            await this.addImageToArchive(archiver, imageList[i], imageTagList[i], regionList[i]);
         }
         await archiver.finalize();
         return exportedFilename;
@@ -74,14 +56,10 @@ export class DatasetExporterImpl implements DatasetExporter {
     }
 
     private getArchiver(exportedFilename: string): Archiver {
-        const outputStream = createWriteStream(
-            this.getExportedFilePath(exportedFilename)
-        );
+        const outputStream = createWriteStream(this.getExportedFilePath(exportedFilename));
         const archiver = create("zip", { zlib: { level: 9 } });
         outputStream.on("close", () => {
-            this.logger.info(
-                `Exported ${exportedFilename}: ${archiver.pointer()} bytes`
-            );
+            this.logger.info(`Exported ${exportedFilename}: ${archiver.pointer()} bytes`);
         });
         archiver.on("warning", (error) => {
             if (error.code === "ENOENT") {
@@ -115,20 +93,10 @@ export class DatasetExporterImpl implements DatasetExporter {
         imageTagProtoList: ImageTagProto[],
         regionProtoList: RegionProto[]
     ): Promise<void> {
-        const imageMetadataJSON = await this.getImageMetadataJSON(
-            imageProto,
-            imageTagProtoList,
-            regionProtoList
-        );
-        const originalImageFilePath = this.getOriginalImageFilePath(
-            imageProto.originalImageFilename || ""
-        );
-        const exportedImageFilename = this.getExportedImageFilename(
-            imageProto.id || 0
-        );
-        const exportedMetadataFilename = this.getExportedMetadataFilename(
-            imageProto.id || 0
-        );
+        const imageMetadataJSON = await this.getImageMetadataJSON(imageProto, imageTagProtoList, regionProtoList);
+        const originalImageFilePath = this.getOriginalImageFilePath(imageProto.originalImageFilename || "");
+        const exportedImageFilename = this.getExportedImageFilename(imageProto.id || 0);
+        const exportedMetadataFilename = this.getExportedMetadataFilename(imageProto.id || 0);
         archiver.file(originalImageFilePath, {
             name: exportedImageFilename,
             prefix: "images",
@@ -146,16 +114,10 @@ export class DatasetExporterImpl implements DatasetExporter {
     ): Promise<string> {
         const image = await this.imageProtoToImageConverter.convert(imageProto);
         const imageTagList = imageTagProtoList.map(
-            (imageTagProto) =>
-                new ImageTag(
-                    imageTagProto.id || 0,
-                    imageTagProto.displayName || ""
-                )
+            (imageTagProto) => new ImageTag(imageTagProto.id || 0, imageTagProto.displayName || "")
         );
         const regionList = await Promise.all(
-            regionProtoList.map((regionProto) =>
-                this.regionProtoToRegionConverter.convert(regionProto)
-            )
+            regionProtoList.map((regionProto) => this.regionProtoToRegionConverter.convert(regionProto))
         );
         return JSON.stringify({
             image: image,
@@ -165,10 +127,7 @@ export class DatasetExporterImpl implements DatasetExporter {
     }
 
     private getOriginalImageFilePath(originalImageFilename: string): string {
-        return join(
-            this.imageServiceConfig.originalImageDir,
-            originalImageFilename
-        );
+        return join(this.imageServiceConfig.originalImageDir, originalImageFilename);
     }
 
     private getExportedImageFilename(imageId: number): string {

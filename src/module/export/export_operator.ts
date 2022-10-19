@@ -1,27 +1,26 @@
 import { injected, token } from "brandi";
 import { Logger } from "winston";
 import { ApplicationConfig, APPLICATION_CONFIG_TOKEN } from "../../config";
-import {
-    ExportDataAccessor,
-    EXPORT_DATA_ACCESSOR_TOKEN,
-} from "../../dataaccess/db";
-import { IMAGE_SERVICE_DM_TOKEN } from "../../dataaccess/grpc";
+import { ExportDataAccessor, EXPORT_DATA_ACCESSOR_TOKEN } from "../../dataaccess/db";
 import { _ExportStatus_Values } from "../../proto/gen/ExportStatus";
 import { _ExportType_Values } from "../../proto/gen/ExportType";
 import { ImageListFilterOptions } from "../../proto/gen/ImageListFilterOptions";
 import { Image } from "../../proto/gen/Image";
 import { ImageTag } from "../../proto/gen/ImageTag";
 import { Region } from "../../proto/gen/Region";
-import { ImageServiceClient } from "../../proto/gen/ImageService";
-import {
-    LOGGER_TOKEN,
-    promisifyGRPCCall,
-    Timer,
-    TIMER_TOKEN,
-} from "../../utils";
+import { LOGGER_TOKEN, Timer, TIMER_TOKEN } from "../../utils";
 import { DatasetExporter, DATASET_EXPORTER_TOKEN } from "./dataset_exporter";
 import { ExcelExporter, EXCEL_EXPORTER_TOKEN } from "./excel_exporter";
-import { _ImageListSortOrder_Values } from "../../proto/gen/ImageListSortOrder";
+import { ImageInfoProvider, IMAGE_INFO_PROVIDER_TOKEN } from "../info_providers";
+import { _ImageStatus_Values } from "../../proto/gen/ImageStatus";
+
+interface ExportData {
+    imageList: Image[];
+    imageTagList: ImageTag[][];
+    regionList: Region[][];
+    regionSnapshotListAtPublishTime: Region[][];
+    regionSnapshotListAtVerifyTime: Region[][];
+}
 
 export interface ExportOperator {
     processExport(id: number): Promise<void>;
@@ -30,7 +29,7 @@ export interface ExportOperator {
 export class ExportOperatorImpl implements ExportOperator {
     constructor(
         private readonly exportDM: ExportDataAccessor,
-        private readonly imageServiceDM: ImageServiceClient,
+        private readonly imageInfoProvider: ImageInfoProvider,
         private readonly datasetExporter: DatasetExporter,
         private readonly excelExporter: ExcelExporter,
         private readonly timer: Timer,
@@ -39,29 +38,24 @@ export class ExportOperatorImpl implements ExportOperator {
     ) {}
 
     public async processExport(id: number): Promise<void> {
-        const exportRequest = await this.exportDM.withTransaction(
-            async (exportDM) => {
-                const exportRequest = await exportDM.getExportWithXLock(id);
-                if (exportRequest === null) {
-                    this.logger.error("no export with export_id found", {
-                        exportId: id,
-                    });
-                    return null;
-                }
-
-                if (exportRequest.status === _ExportStatus_Values.DONE) {
-                    this.logger.error(
-                        "export with export_id already has status of done",
-                        { exportId: id }
-                    );
-                    return null;
-                }
-
-                exportRequest.status = _ExportStatus_Values.PROCESSING;
-                await exportDM.updateExport(exportRequest);
-                return exportRequest;
+        const exportRequest = await this.exportDM.withTransaction(async (exportDM) => {
+            const exportRequest = await exportDM.getExportWithXLock(id);
+            if (exportRequest === null) {
+                this.logger.error("no export with export_id found", {
+                    exportId: id,
+                });
+                return null;
             }
-        );
+
+            if (exportRequest.status === _ExportStatus_Values.DONE) {
+                this.logger.error("export with export_id already has status of done", { exportId: id });
+                return null;
+            }
+
+            exportRequest.status = _ExportStatus_Values.PROCESSING;
+            await exportDM.updateExport(exportRequest);
+            return exportRequest;
+        });
         if (exportRequest === null) {
             return;
         }
@@ -71,46 +65,26 @@ export class ExportOperatorImpl implements ExportOperator {
             exportRequest,
         });
 
-        const { imageList, imageTagList, regionList } =
-            await this.getImageListBatched(exportRequest.filterOptions);
-        this.logger.info("retrieved image information", {
-            imageCount: imageList.length,
-        });
+        const exportData = await this.getExportData(exportRequest.filterOptions);
+        this.logger.info("retrieved image information", { imageCount: exportData.imageList.length });
 
         const exportedFileFilename =
             exportRequest.type === _ExportType_Values.DATASET
-                ? await this.datasetExporter.generateExportFile(
-                      imageList,
-                      imageTagList,
-                      regionList
-                  )
-                : await this.excelExporter.generateExportFile(
-                      imageList,
-                      imageTagList,
-                      regionList
-                  );
-        this.logger.info("successfully generated export file", {
-            exportedFileFilename,
-        });
+                ? await this.datasetExporter.generateExportFile(exportData)
+                : await this.excelExporter.generateExportFile(exportData);
+        this.logger.info("successfully generated export file", { exportedFileFilename });
 
-        const expireTime =
-            this.timer.getCurrentTime() +
-            this.applicationConfig.exportExpireTime;
+        const expireTime = this.timer.getCurrentTime() + this.applicationConfig.exportExpireTime;
 
         await this.exportDM.withTransaction(async (exportDM) => {
             const exportRequest = await exportDM.getExportWithXLock(id);
             if (exportRequest === null) {
-                this.logger.error("no export with export_id found", {
-                    exportId: id,
-                });
+                this.logger.error("no export with export_id found", { exportId: id });
                 return;
             }
 
             if (exportRequest.status === _ExportStatus_Values.DONE) {
-                this.logger.error(
-                    "export with export_id already has status of done",
-                    { exportId: id }
-                );
+                this.logger.error("export with export_id already has status of done", { exportId: id });
                 return;
             }
 
@@ -121,66 +95,29 @@ export class ExportOperatorImpl implements ExportOperator {
         });
     }
 
-    private async getImageListBatched(
-        filterOptions: ImageListFilterOptions
-    ): Promise<{
-        imageList: Image[];
-        imageTagList: ImageTag[][];
-        regionList: Region[][];
-    }> {
-        const imageList: Image[] = [];
-        const imageTagList: ImageTag[][] = [];
-        const regionList: Region[][] = [];
+    private async getExportData(filterOptions: ImageListFilterOptions): Promise<ExportData> {
+        const { imageList, imageTagList, regionList } = await this.imageInfoProvider.getImageList(filterOptions);
 
-        let currentOffset = 0;
-        // eslint-disable-next-line no-constant-condition
-        while (true) {
-            const { error: getImageListError, response: getImageListResponse } =
-                await promisifyGRPCCall(
-                    this.imageServiceDM.getImageList.bind(this.imageServiceDM),
-                    {
-                        sortOrder: _ImageListSortOrder_Values.ID_ASCENDING,
-                        filterOptions: filterOptions,
-                        offset: currentOffset,
-                        limit: this.applicationConfig.getImageListBatchSize,
-                        withImageTag: true,
-                        withRegion: true,
-                    }
-                );
-            if (getImageListError !== null) {
-                this.logger.error("failed to call image_list.getImageList()", {
-                    error: getImageListError,
-                });
-                throw getImageListError;
-            }
-
-            const batchImageList = getImageListResponse?.imageList || [];
-            if (batchImageList.length === 0) {
-                break;
-            }
-            imageList.push(...batchImageList);
-            getImageListResponse?.imageTagListOfImageList?.forEach(
-                (batchImageTagList) => {
-                    imageTagList.push(batchImageTagList.imageTagList || []);
-                }
+        const regionSnapshotListAtPublishTime: Region[][] = [];
+        const regionSnapshotListAtVerifyTime: Region[][] = [];
+        for (const image of imageList) {
+            const imageId = image.id || 0;
+            regionSnapshotListAtPublishTime.push(
+                await this.imageInfoProvider.getRegionSnapshotListAtStatus(imageId, _ImageStatus_Values.PUBLISHED)
             );
-            getImageListResponse?.regionListOfImageList?.forEach(
-                (batchRegionList) => {
-                    regionList.push(batchRegionList.regionList || []);
-                }
+            regionSnapshotListAtVerifyTime.push(
+                await this.imageInfoProvider.getRegionSnapshotListAtStatus(imageId, _ImageStatus_Values.VERIFIED)
             );
-
-            currentOffset += batchImageList.length;
         }
 
-        return { imageList, imageTagList, regionList };
+        return { imageList, imageTagList, regionList, regionSnapshotListAtPublishTime, regionSnapshotListAtVerifyTime };
     }
 }
 
 injected(
     ExportOperatorImpl,
     EXPORT_DATA_ACCESSOR_TOKEN,
-    IMAGE_SERVICE_DM_TOKEN,
+    IMAGE_INFO_PROVIDER_TOKEN,
     DATASET_EXPORTER_TOKEN,
     EXCEL_EXPORTER_TOKEN,
     TIMER_TOKEN,

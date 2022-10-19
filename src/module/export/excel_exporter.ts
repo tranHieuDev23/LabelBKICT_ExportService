@@ -7,21 +7,19 @@ import { Image as ImageProto } from "../../proto/gen/Image";
 import { _ImageStatus_Values } from "../../proto/gen/ImageStatus";
 import { ImageTag as ImageTagProto } from "../../proto/gen/ImageTag";
 import { Region as RegionProto } from "../../proto/gen/Region";
-import {
-    IdGenerator,
-    ID_GENERATOR_TOKEN,
-    LOGGER_TOKEN,
-    Timer,
-    TIMER_TOKEN,
-} from "../../utils";
+import { IdGenerator, ID_GENERATOR_TOKEN, LOGGER_TOKEN, Timer, TIMER_TOKEN } from "../../utils";
 import { UserInfoProvider, USER_INFO_PROVIDER_TOKEN } from "../info_providers";
 
+export interface ExcelExporterArguments {
+    imageList: ImageProto[];
+    imageTagList: ImageTagProto[][];
+    regionList: RegionProto[][];
+    regionSnapshotListAtPublishTime: RegionProto[][];
+    regionSnapshotListAtVerifyTime: RegionProto[][];
+}
+
 export interface ExcelExporter {
-    generateExportFile(
-        imageList: ImageProto[],
-        imageTagList: ImageTagProto[][],
-        regionList: RegionProto[][]
-    ): Promise<string>;
+    generateExportFile(args: ExcelExporterArguments): Promise<string>;
 }
 
 const EXCEL_COLUMN_LIST = [
@@ -81,6 +79,16 @@ const EXCEL_COLUMN_LIST = [
         width: 40,
     },
     {
+        header: "Labels in image at publish time",
+        key: "regionLabelsAtPublishTime",
+        width: 40,
+    },
+    {
+        header: "Labels in image at verify time",
+        key: "regionLabelsAtVerifyTime",
+        width: 40,
+    },
+    {
         header: "Tags",
         key: "tags",
         width: 40,
@@ -97,25 +105,26 @@ export class ExcelExporterImpl implements ExcelExporter {
         private readonly userInfoProvider: UserInfoProvider,
         private readonly applicationConfig: ApplicationConfig,
         private readonly timer: Timer,
-        private readonly idGenerator: IdGenerator,
-        private readonly logger: Logger
+        private readonly idGenerator: IdGenerator
     ) {}
 
-    public async generateExportFile(
-        imageList: ImageProto[],
-        imageTagList: ImageTagProto[][],
-        regionList: RegionProto[][]
-    ): Promise<string> {
+    public async generateExportFile(args: ExcelExporterArguments): Promise<string> {
+        const { imageList, imageTagList, regionList, regionSnapshotListAtPublishTime, regionSnapshotListAtVerifyTime } =
+            args;
+
         const exportedFilename = await this.getExportedFilename();
         const { workbook, worksheet } = this.getImageInformationWorkbook();
         for (let i = 0; i < imageList.length; i++) {
             const row = await this.imageToWorkbookRow(
                 imageList[i],
                 imageTagList[i],
-                regionList[i]
+                regionList[i],
+                regionSnapshotListAtPublishTime[i],
+                regionSnapshotListAtVerifyTime[i]
             );
             worksheet.addRow(row);
         }
+
         const exportedFilePath = this.getExportedFilePath(exportedFilename);
         workbook.xlsx.writeFile(exportedFilePath);
         return exportedFilename;
@@ -140,7 +149,9 @@ export class ExcelExporterImpl implements ExcelExporter {
     private async imageToWorkbookRow(
         image: ImageProto,
         imageTagProtoList: ImageTagProto[],
-        regionProtoList: RegionProto[]
+        regionProtoList: RegionProto[],
+        regionProtoListAtPublishTime: RegionProto[],
+        regionProtoListAtVerifyTime: RegionProto[]
     ): Promise<any> {
         const originalFilename = image.originalFileName || "";
         const exportedFilename = this.getImageExportedFilename(image.id || 0);
@@ -162,9 +173,15 @@ export class ExcelExporterImpl implements ExcelExporter {
             .filter((region) => region.label)
             .map((region) => region.label?.displayName)
             .join(", ");
-        const tags = imageTagProtoList
-            .map((imageTag) => imageTag.displayName)
+        const regionLabelsAtPublishTime = regionProtoListAtPublishTime
+            .filter((region) => region.label)
+            .map((region) => region.label?.displayName)
             .join(", ");
+        const regionLabelsAtVerifyTime = regionProtoListAtVerifyTime
+            .filter((region) => region.label)
+            .map((region) => region.label?.displayName)
+            .join(", ");
+        const tags = imageTagProtoList.map((imageTag) => imageTag.displayName).join(", ");
         const description = image.description;
         return {
             originalFilename,
@@ -178,6 +195,8 @@ export class ExcelExporterImpl implements ExcelExporter {
             imageType,
             status,
             regionLabels,
+            regionLabelsAtPublishTime,
+            regionLabelsAtVerifyTime,
             tags,
             description,
         };
@@ -187,12 +206,7 @@ export class ExcelExporterImpl implements ExcelExporter {
         return `${imageId}.jpeg`;
     }
 
-    private getImageStatusString(
-        status:
-            | _ImageStatus_Values
-            | keyof typeof _ImageStatus_Values
-            | undefined
-    ): string {
+    private getImageStatusString(status: _ImageStatus_Values | keyof typeof _ImageStatus_Values | undefined): string {
         switch (status) {
             case _ImageStatus_Values.UPLOADED:
             case "UPLOADED":
@@ -216,13 +230,6 @@ export class ExcelExporterImpl implements ExcelExporter {
     }
 }
 
-injected(
-    ExcelExporterImpl,
-    USER_INFO_PROVIDER_TOKEN,
-    APPLICATION_CONFIG_TOKEN,
-    TIMER_TOKEN,
-    ID_GENERATOR_TOKEN,
-    LOGGER_TOKEN
-);
+injected(ExcelExporterImpl, USER_INFO_PROVIDER_TOKEN, APPLICATION_CONFIG_TOKEN, TIMER_TOKEN, ID_GENERATOR_TOKEN);
 
 export const EXCEL_EXPORTER_TOKEN = token<ExcelExporter>("ExcelExporter");

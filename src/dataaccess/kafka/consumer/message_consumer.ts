@@ -19,9 +19,7 @@ export class MessageConsumer {
         private readonly logger: Logger
     ) {}
 
-    public async registerHandlerListAndStart(
-        handlerList: MessageHandler[]
-    ): Promise<void> {
+    public async registerHandlerListAndStart(handlerList: MessageHandler[]): Promise<void> {
         const topicToHandlerMap = this.getTopicToHandlerMap(handlerList);
         await this.consumer.connect();
         for (const handler of handlerList) {
@@ -31,8 +29,8 @@ export class MessageConsumer {
             });
         }
         await this.consumer.run({
-            eachMessage: async ({ topic, message, heartbeat }) => {
-                const handler = topicToHandlerMap.get(topic);
+            eachBatch: async ({ batch, heartbeat }) => {
+                const handler = topicToHandlerMap.get(batch.topic);
                 if (handler === undefined) {
                     return;
                 }
@@ -41,14 +39,11 @@ export class MessageConsumer {
                     async () => await heartbeat(),
                     this.kafkaConfig.heartbeatInterval
                 );
+
                 try {
-                    await handler(message.value);
+                    await Promise.all(batch.messages.map((message) => handler(message.value)));
                 } catch (error) {
-                    this.logger.error("failed to handle message", {
-                        topic,
-                        message,
-                        error,
-                    });
+                    this.logger.error("failed to handle message", { topic: batch.topic, error });
                     throw error;
                 } finally {
                     clearInterval(heartbeatInterval);
@@ -57,20 +52,11 @@ export class MessageConsumer {
         });
     }
 
-    private getTopicToHandlerMap(
-        handlerList: MessageHandler[]
-    ): Map<string, MessageHandlerFunc> {
-        return new Map(
-            handlerList.map((handler) => [handler.topic, handler.onMessage])
-        );
+    private getTopicToHandlerMap(handlerList: MessageHandler[]): Map<string, MessageHandlerFunc> {
+        return new Map(handlerList.map((handler) => [handler.topic, handler.onMessage]));
     }
 }
 
-injected(
-    MessageConsumer,
-    KAFKA_CONSUMER_TOKEN,
-    KAFKA_CONFIG_TOKEN,
-    LOGGER_TOKEN
-);
+injected(MessageConsumer, KAFKA_CONSUMER_TOKEN, KAFKA_CONFIG_TOKEN, LOGGER_TOKEN);
 
 export const MESSAGE_CONSUMER_TOKEN = token<MessageConsumer>("MessageConsumer");
