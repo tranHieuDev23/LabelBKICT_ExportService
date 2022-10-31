@@ -6,6 +6,7 @@ import * as grpc from "../dataaccess/grpc";
 import * as db from "../dataaccess/db";
 import * as elasticsearch from "../dataaccess/elasticsearch";
 import * as kafka from "../dataaccess/kafka";
+import * as s3 from "../dataaccess/s3";
 import * as modules from "../module";
 import * as service from "../service";
 
@@ -21,6 +22,7 @@ export function startGRPCServer(dotenvPath: string) {
     db.bindToContainer(container);
     elasticsearch.bindToContainer(container);
     kafka.bindToContainer(container);
+    s3.bindToContainer(container);
     modules.bindToContainer(container);
     service.bindToContainer(container);
 
