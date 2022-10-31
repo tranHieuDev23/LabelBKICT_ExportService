@@ -1,24 +1,15 @@
-import { createReadStream } from "fs";
-import { join } from "path";
 import { Readable } from "stream";
 import { status } from "@grpc/grpc-js";
 import { injected, token } from "brandi";
 import { Logger } from "winston";
-import {
-    ExportDataAccessor,
-    EXPORT_DATA_ACCESSOR_TOKEN,
-} from "../../dataaccess/db";
+import { ExportDataAccessor, EXPORT_DATA_ACCESSOR_TOKEN } from "../../dataaccess/db";
 import { Export } from "../../proto/gen/Export";
 import { _ExportStatus_Values } from "../../proto/gen/ExportStatus";
 import { _ExportType_Values } from "../../proto/gen/ExportType";
 import { ImageListFilterOptions } from "../../proto/gen/ImageListFilterOptions";
 import { ErrorWithStatus, LOGGER_TOKEN, Timer, TIMER_TOKEN } from "../../utils";
-import { ApplicationConfig, APPLICATION_CONFIG_TOKEN } from "../../config";
-import {
-    ExportCreated,
-    ExportCreatedProducer,
-    EXPORT_CREATED_PRODUCER_TOKEN,
-} from "../../dataaccess/kafka";
+import { ExportCreated, ExportCreatedProducer, EXPORT_CREATED_PRODUCER_TOKEN } from "../../dataaccess/kafka";
+import { BucketDM, EXPORT_S3_DM_TOKEN } from "../../dataaccess/s3";
 
 export interface ExportManagementOperator {
     createExport(
@@ -41,9 +32,9 @@ export interface ExportManagementOperator {
 
 export class ExportManagementOperatorImpl implements ExportManagementOperator {
     constructor(
-        private readonly exportDM: ExportDataAccessor,
+        private readonly exportDatabaseDM: ExportDataAccessor,
+        private readonly exportS3DM: BucketDM,
         private readonly exportCreatedProducer: ExportCreatedProducer,
-        private readonly applicationConfig: ApplicationConfig,
         private readonly timer: Timer,
         private readonly logger: Logger
     ) {}
@@ -55,7 +46,7 @@ export class ExportManagementOperatorImpl implements ExportManagementOperator {
     ): Promise<Export> {
         const currentTime = this.timer.getCurrentTime();
 
-        const exportId = await this.exportDM.createExport({
+        const exportId = await this.exportDatabaseDM.createExport({
             requestedByUserId: requestedByUserId,
             type: type,
             requestTime: currentTime,
@@ -65,9 +56,7 @@ export class ExportManagementOperatorImpl implements ExportManagementOperator {
             exportedFilename: "",
         });
 
-        await this.exportCreatedProducer.createExportCreatedMessage(
-            new ExportCreated(exportId)
-        );
+        await this.exportCreatedProducer.createExportCreatedMessage(new ExportCreated(exportId));
 
         return {
             id: exportId,
@@ -87,13 +76,8 @@ export class ExportManagementOperatorImpl implements ExportManagementOperator {
     ): Promise<{ totalExportCount: number; exportList: Export[] }> {
         const currentTime = this.timer.getCurrentTime();
         const dmResults = await Promise.all([
-            this.exportDM.getExportCount(requestedByUserId, currentTime),
-            this.exportDM.getExportList(
-                requestedByUserId,
-                currentTime,
-                offset,
-                limit
-            ),
+            this.exportDatabaseDM.getExportCount(requestedByUserId, currentTime),
+            this.exportDatabaseDM.getExportList(requestedByUserId, currentTime, offset, limit),
         ]);
         const totalExportCount = dmResults[0];
         const exportList = dmResults[1];
@@ -101,63 +85,45 @@ export class ExportManagementOperatorImpl implements ExportManagementOperator {
     }
 
     public async getExport(id: number): Promise<Export> {
-        const exportRequest = await this.exportDM.getExport(id);
+        const exportRequest = await this.exportDatabaseDM.getExport(id);
         if (exportRequest === null) {
             this.logger.error("no export with export_id found", {
                 exportId: id,
             });
-            throw new ErrorWithStatus(
-                `no export with export_id ${id} found`,
-                status.NOT_FOUND
-            );
+            throw new ErrorWithStatus(`no export with export_id ${id} found`, status.NOT_FOUND);
         }
         return exportRequest;
     }
 
     public async getExportFile(id: number): Promise<Readable> {
-        const exportRequest = await this.exportDM.getExport(id);
+        const exportRequest = await this.exportDatabaseDM.getExport(id);
         if (exportRequest === null) {
             this.logger.error("no export with export_id found", {
                 exportId: id,
             });
-            throw new ErrorWithStatus(
-                `no export with export_id ${id} found`,
-                status.NOT_FOUND
-            );
+            throw new ErrorWithStatus(`no export with export_id ${id} found`, status.NOT_FOUND);
         }
         if (exportRequest.status !== _ExportStatus_Values.DONE) {
             this.logger.error("export with export_id has not been done yet", {
                 exportId: id,
             });
-            throw new ErrorWithStatus(
-                `export with export_id ${id} has not been done yet`,
-                status.FAILED_PRECONDITION
-            );
+            throw new ErrorWithStatus(`export with export_id ${id} has not been done yet`, status.FAILED_PRECONDITION);
         }
-        const exportedFilePath = this.getExportedFilePath(
-            exportRequest.exportedFileFilename
-        );
-        return createReadStream(exportedFilePath);
+        return await this.exportS3DM.getFileStream(exportRequest.exportedFileFilename);
     }
 
     public async deleteExport(id: number): Promise<void> {
-        await this.exportDM.deleteExport(id);
-    }
-
-    private getExportedFilePath(exportedFileFilename: string): string {
-        return join(this.applicationConfig.exportDir, exportedFileFilename);
+        await this.exportDatabaseDM.deleteExport(id);
     }
 }
 
 injected(
     ExportManagementOperatorImpl,
     EXPORT_DATA_ACCESSOR_TOKEN,
+    EXPORT_S3_DM_TOKEN,
     EXPORT_CREATED_PRODUCER_TOKEN,
-    APPLICATION_CONFIG_TOKEN,
     TIMER_TOKEN,
     LOGGER_TOKEN
 );
 
-export const EXPORT_MANAGEMENT_OPERATOR_TOKEN = token<ExportManagementOperator>(
-    "ExportManagementOperator"
-);
+export const EXPORT_MANAGEMENT_OPERATOR_TOKEN = token<ExportManagementOperator>("ExportManagementOperator");

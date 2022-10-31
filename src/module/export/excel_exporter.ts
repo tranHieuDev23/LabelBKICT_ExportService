@@ -1,16 +1,15 @@
 import { join } from "path";
 import { injected, token } from "brandi";
 import { Workbook, Worksheet } from "exceljs";
-import { Logger } from "winston";
-import { ApplicationConfig, APPLICATION_CONFIG_TOKEN } from "../../config";
 import { Image as ImageProto } from "../../proto/gen/Image";
 import { _ImageStatus_Values } from "../../proto/gen/ImageStatus";
 import { ImageTag as ImageTagProto } from "../../proto/gen/ImageTag";
 import { Region as RegionProto } from "../../proto/gen/Region";
-import { IdGenerator, ID_GENERATOR_TOKEN, LOGGER_TOKEN, Timer, TIMER_TOKEN } from "../../utils";
+import { IdGenerator, ID_GENERATOR_TOKEN, Timer, TIMER_TOKEN } from "../../utils";
 import { UserInfoProvider, USER_INFO_PROVIDER_TOKEN } from "../info_providers";
 
 export interface ExcelExporterArguments {
+    exportedFileDirectory: string;
     imageList: ImageProto[];
     imageTagList: ImageTagProto[][];
     regionList: RegionProto[][];
@@ -103,7 +102,6 @@ const EXCEL_COLUMN_LIST = [
 export class ExcelExporterImpl implements ExcelExporter {
     constructor(
         private readonly userInfoProvider: UserInfoProvider,
-        private readonly applicationConfig: ApplicationConfig,
         private readonly timer: Timer,
         private readonly idGenerator: IdGenerator
     ) {}
@@ -112,7 +110,7 @@ export class ExcelExporterImpl implements ExcelExporter {
         const { imageList, imageTagList, regionList, regionSnapshotListAtPublishTime, regionSnapshotListAtVerifyTime } =
             args;
 
-        const exportedFilename = await this.getExportedFilename();
+        const exportedFileName = await this.getExportedFileName();
         const { workbook, worksheet } = this.getImageInformationWorkbook();
         for (let i = 0; i < imageList.length; i++) {
             const row = await this.imageToWorkbookRow(
@@ -125,12 +123,12 @@ export class ExcelExporterImpl implements ExcelExporter {
             worksheet.addRow(row);
         }
 
-        const exportedFilePath = this.getExportedFilePath(exportedFilename);
+        const exportedFilePath = join(args.exportedFileDirectory, exportedFileName);
         workbook.xlsx.writeFile(exportedFilePath);
-        return exportedFilename;
+        return exportedFileName;
     }
 
-    private async getExportedFilename(): Promise<string> {
+    private async getExportedFileName(): Promise<string> {
         const currentTime = this.timer.getCurrentTime();
         const id = await this.idGenerator.generate();
         return `Dataset Information-${currentTime}-${id}.xlsx`;
@@ -224,12 +222,8 @@ export class ExcelExporterImpl implements ExcelExporter {
                 return "";
         }
     }
-
-    private getExportedFilePath(exportedFilename: string): string {
-        return join(this.applicationConfig.exportDir, exportedFilename);
-    }
 }
 
-injected(ExcelExporterImpl, USER_INFO_PROVIDER_TOKEN, APPLICATION_CONFIG_TOKEN, TIMER_TOKEN, ID_GENERATOR_TOKEN);
+injected(ExcelExporterImpl, USER_INFO_PROVIDER_TOKEN, TIMER_TOKEN, ID_GENERATOR_TOKEN);
 
 export const EXCEL_EXPORTER_TOKEN = token<ExcelExporter>("ExcelExporter");

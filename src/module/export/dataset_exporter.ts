@@ -3,12 +3,6 @@ import { Logger } from "winston";
 import { Archiver, create } from "archiver";
 import { createWriteStream } from "fs";
 import { join } from "path";
-import {
-    ApplicationConfig,
-    APPLICATION_CONFIG_TOKEN,
-    ImageServiceConfig,
-    IMAGE_SERVICE_CONFIG_TOKEN,
-} from "../../config";
 import { Image as ImageProto } from "../../proto/gen/Image";
 import { ImageTag as ImageTagProto } from "../../proto/gen/ImageTag";
 import { Region as RegionProto } from "../../proto/gen/Region";
@@ -16,8 +10,10 @@ import { IdGenerator, ID_GENERATOR_TOKEN, LOGGER_TOKEN, Timer, TIMER_TOKEN } fro
 import { ImageProtoToImageConverter, IMAGE_PROTO_TO_IMAGE_CONVERTER_TOKEN } from "./image_proto_to_image";
 import { RegionProtoToRegionConverter, REGION_PROTO_TO_REGION_CONVERTER_TOKEN } from "./region_proto_to_region";
 import { ImageTag } from "./dataset_metadata_models";
+import { BucketDM, ORIGINAL_IMAGE_S3_DM_TOKEN } from "../../dataaccess/s3";
 
 export interface DatasetExporterArguments {
+    exportedFileDirectory: string;
     imageList: ImageProto[];
     imageTagList: ImageTagProto[][];
     regionList: RegionProto[][];
@@ -29,10 +25,9 @@ export interface DatasetExporter {
 
 export class DatasetExporterImpl implements DatasetExporter {
     constructor(
+        private readonly originalImageS3DM: BucketDM,
         private readonly imageProtoToImageConverter: ImageProtoToImageConverter,
         private readonly regionProtoToRegionConverter: RegionProtoToRegionConverter,
-        private readonly applicationConfig: ApplicationConfig,
-        private readonly imageServiceConfig: ImageServiceConfig,
         private readonly timer: Timer,
         private readonly idGenerator: IdGenerator,
         private readonly logger: Logger
@@ -40,26 +35,27 @@ export class DatasetExporterImpl implements DatasetExporter {
 
     public async generateExportFile(args: DatasetExporterArguments): Promise<string> {
         const { imageList, imageTagList, regionList } = args;
-        const exportedFilename = await this.getExportedFilename();
-        const archiver = this.getArchiver(exportedFilename);
+        const exportedFileName = await this.getExportedFileName();
+        const archiver = this.getArchiver(args.exportedFileDirectory, exportedFileName);
         for (let i = 0; i < imageList.length; i++) {
-            await this.addImageToArchive(archiver, imageList[i], imageTagList[i], regionList[i]);
+            await this.addImageToArchive(archiver, imageList[i]);
+            await this.addImageMetadataToArchive(archiver, imageList[i], imageTagList[i], regionList[i]);
         }
         await archiver.finalize();
-        return exportedFilename;
+        return exportedFileName;
     }
 
-    private async getExportedFilename(): Promise<string> {
+    private async getExportedFileName(): Promise<string> {
         const currentTime = this.timer.getCurrentTime();
         const id = await this.idGenerator.generate();
         return `Dataset-${currentTime}-${id}.zip`;
     }
 
-    private getArchiver(exportedFilename: string): Archiver {
-        const outputStream = createWriteStream(this.getExportedFilePath(exportedFilename));
+    private getArchiver(exportedFileDirectory: string, exportedFileName: string): Archiver {
+        const outputStream = createWriteStream(join(exportedFileDirectory, exportedFileName));
         const archiver = create("zip", { zlib: { level: 9 } });
         outputStream.on("close", () => {
-            this.logger.info(`Exported ${exportedFilename}: ${archiver.pointer()} bytes`);
+            this.logger.info(`Exported ${exportedFileName}: ${archiver.pointer()} bytes`);
         });
         archiver.on("warning", (error) => {
             if (error.code === "ENOENT") {
@@ -83,24 +79,23 @@ export class DatasetExporterImpl implements DatasetExporter {
         return archiver;
     }
 
-    private getExportedFilePath(exportedFilename: string): string {
-        return join(this.applicationConfig.exportDir, exportedFilename);
+    private async addImageToArchive(archiver: Archiver, imageProto: ImageProto): Promise<void> {
+        const originalImageFileData = await this.originalImageS3DM.getFile(imageProto.originalImageFilename || "");
+        const exportedImageFilename = this.getExportedImageFilename(imageProto.id || 0);
+        archiver.append(originalImageFileData, {
+            name: exportedImageFilename,
+            prefix: "images",
+        });
     }
 
-    private async addImageToArchive(
+    private async addImageMetadataToArchive(
         archiver: Archiver,
         imageProto: ImageProto,
         imageTagProtoList: ImageTagProto[],
         regionProtoList: RegionProto[]
     ): Promise<void> {
         const imageMetadataJSON = await this.getImageMetadataJSON(imageProto, imageTagProtoList, regionProtoList);
-        const originalImageFilePath = this.getOriginalImageFilePath(imageProto.originalImageFilename || "");
-        const exportedImageFilename = this.getExportedImageFilename(imageProto.id || 0);
         const exportedMetadataFilename = this.getExportedMetadataFilename(imageProto.id || 0);
-        archiver.file(originalImageFilePath, {
-            name: exportedImageFilename,
-            prefix: "images",
-        });
         archiver.append(imageMetadataJSON, {
             name: exportedMetadataFilename,
             prefix: "metadata",
@@ -126,10 +121,6 @@ export class DatasetExporterImpl implements DatasetExporter {
         });
     }
 
-    private getOriginalImageFilePath(originalImageFilename: string): string {
-        return join(this.imageServiceConfig.originalImageDir, originalImageFilename);
-    }
-
     private getExportedImageFilename(imageId: number): string {
         return `${imageId}.jpeg`;
     }
@@ -141,10 +132,9 @@ export class DatasetExporterImpl implements DatasetExporter {
 
 injected(
     DatasetExporterImpl,
+    ORIGINAL_IMAGE_S3_DM_TOKEN,
     IMAGE_PROTO_TO_IMAGE_CONVERTER_TOKEN,
     REGION_PROTO_TO_REGION_CONVERTER_TOKEN,
-    APPLICATION_CONFIG_TOKEN,
-    IMAGE_SERVICE_CONFIG_TOKEN,
     TIMER_TOKEN,
     ID_GENERATOR_TOKEN,
     LOGGER_TOKEN
