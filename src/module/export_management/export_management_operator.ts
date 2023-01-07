@@ -28,6 +28,7 @@ export interface ExportManagementOperator {
     getExport(id: number): Promise<Export>;
     getExportFile(id: number): Promise<Readable>;
     deleteExport(id: number): Promise<void>;
+    deleteExpiredExports(): Promise<void>;
 }
 
 export class ExportManagementOperatorImpl implements ExportManagementOperator {
@@ -114,6 +115,11 @@ export class ExportManagementOperatorImpl implements ExportManagementOperator {
 
     public async deleteExport(id: number): Promise<void> {
         await this.exportDatabaseDM.deleteExport(id);
+    }
+
+    public async deleteExpiredExports(): Promise<void> {
+        const requestTime = this.timer.getCurrentTime();
+        await this.exportDatabaseDM.deleteExpiredExportList(requestTime);
     }
 }
 

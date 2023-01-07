@@ -5,12 +5,7 @@ import { Logger } from "winston";
 import { _ExportStatus_Values } from "../../proto/gen/ExportStatus";
 import { _ExportType_Values } from "../../proto/gen/ExportType";
 import { ImageListFilterOptions } from "../../proto/gen/ImageListFilterOptions";
-import {
-    BinaryConverter,
-    BINARY_CONVERTER_TOKEN,
-    ErrorWithStatus,
-    LOGGER_TOKEN,
-} from "../../utils";
+import { BinaryConverter, BINARY_CONVERTER_TOKEN, ErrorWithStatus, LOGGER_TOKEN } from "../../utils";
 import { KNEX_INSTANCE_TOKEN } from "./knex";
 
 export class Export {
@@ -38,23 +33,14 @@ export interface CreateExportArguments {
 
 export interface ExportDataAccessor {
     createExport(args: CreateExportArguments): Promise<number>;
-    getExportCount(
-        requestedByUserId: number,
-        requestTime: number
-    ): Promise<number>;
-    getExportList(
-        requestedByUserId: number,
-        requestTime: number,
-        offset: number,
-        limit: number
-    ): Promise<Export[]>;
+    getExportCount(requestedByUserId: number, requestTime: number): Promise<number>;
+    getExportList(requestedByUserId: number, requestTime: number, offset: number, limit: number): Promise<Export[]>;
     getExport(id: number): Promise<Export | null>;
     getExportWithXLock(id: number): Promise<Export | null>;
     updateExport(exp: Export): Promise<void>;
     deleteExport(id: number): Promise<void>;
-    withTransaction<T>(
-        executeFunc: (dm: ExportDataAccessor) => Promise<T>
-    ): Promise<T>;
+    deleteExpiredExportList(requestTime: number): Promise<void>;
+    withTransaction<T>(executeFunc: (dm: ExportDataAccessor) => Promise<T>): Promise<T>;
 }
 
 const TabNameExportServiceExport = "export_service_export_tab";
@@ -78,16 +64,13 @@ export class ExportDataAccessorImpl implements ExportDataAccessor {
         try {
             const rows = await this.knex
                 .insert({
-                    [ColNameExportServiceExportRequestedByUserId]:
-                        args.requestedByUserId,
+                    [ColNameExportServiceExportRequestedByUserId]: args.requestedByUserId,
                     [ColNameExportServiceExportRequestTime]: args.requestTime,
                     [ColNameExportServiceExportType]: args.type,
                     [ColNameExportServiceExportExpireTime]: args.expireTime,
-                    [ColNameExportServiceExportFilterOptions]:
-                        this.binaryConverter.toBuffer(args.filterOptions),
+                    [ColNameExportServiceExportFilterOptions]: this.binaryConverter.toBuffer(args.filterOptions),
                     [ColNameExportServiceExportStatus]: args.status,
-                    [ColNameExportServiceExportExportedFileFilename]:
-                        args.exportedFilename,
+                    [ColNameExportServiceExportExportedFileFilename]: args.exportedFilename,
                 })
                 .returning([ColNameExportServiceExportExportId])
                 .into(TabNameExportServiceExport);
@@ -98,25 +81,14 @@ export class ExportDataAccessorImpl implements ExportDataAccessor {
         }
     }
 
-    public async getExportCount(
-        requestedByUserId: number,
-        requestTime: number
-    ): Promise<number> {
+    public async getExportCount(requestedByUserId: number, requestTime: number): Promise<number> {
         try {
             const rows = await this.knex
                 .count()
                 .from(TabNameExportServiceExport)
-                .where(
-                    ColNameExportServiceExportRequestedByUserId,
-                    "=",
-                    requestedByUserId
-                )
+                .where(ColNameExportServiceExportRequestedByUserId, "=", requestedByUserId)
                 .andWhere((qb) => {
-                    qb.where(
-                        ColNameExportServiceExportExpireTime,
-                        "=",
-                        0
-                    ).orWhere(
+                    qb.where(ColNameExportServiceExportExpireTime, "=", 0).orWhere(
                         ColNameExportServiceExportExpireTime,
                         ">=",
                         requestTime
@@ -139,17 +111,9 @@ export class ExportDataAccessorImpl implements ExportDataAccessor {
             const rows = await this.knex
                 .select()
                 .from(TabNameExportServiceExport)
-                .where(
-                    ColNameExportServiceExportRequestedByUserId,
-                    "=",
-                    requestedByUserId
-                )
+                .where(ColNameExportServiceExportRequestedByUserId, "=", requestedByUserId)
                 .andWhere((qb) => {
-                    qb.where(
-                        ColNameExportServiceExportExpireTime,
-                        "=",
-                        0
-                    ).orWhere(
+                    qb.where(ColNameExportServiceExportExpireTime, "=", 0).orWhere(
                         ColNameExportServiceExportExpireTime,
                         ">=",
                         requestTime
@@ -181,10 +145,7 @@ export class ExportDataAccessorImpl implements ExportDataAccessor {
                 this.logger.debug("more than one export with export_id found", {
                     exportId: id,
                 });
-                throw new ErrorWithStatus(
-                    `more than one export with export_id ${id} found`,
-                    status.INTERNAL
-                );
+                throw new ErrorWithStatus(`more than one export with export_id ${id} found`, status.INTERNAL);
             }
             return this.getExportFromRow(rows[0]);
         } catch (error) {
@@ -210,10 +171,7 @@ export class ExportDataAccessorImpl implements ExportDataAccessor {
                 this.logger.debug("more than one export with export_id found", {
                     exportId: id,
                 });
-                throw new ErrorWithStatus(
-                    `more than one export with export_id ${id} found`,
-                    status.INTERNAL
-                );
+                throw new ErrorWithStatus(`more than one export with export_id ${id} found`, status.INTERNAL);
             }
             return this.getExportFromRow(rows[0]);
         } catch (error) {
@@ -227,16 +185,13 @@ export class ExportDataAccessorImpl implements ExportDataAccessor {
             await this.knex
                 .table(TabNameExportServiceExport)
                 .update({
-                    [ColNameExportServiceExportRequestedByUserId]:
-                        exp.requestedByUserId,
+                    [ColNameExportServiceExportRequestedByUserId]: exp.requestedByUserId,
                     [ColNameExportServiceExportRequestTime]: exp.requestTime,
                     [ColNameExportServiceExportType]: exp.type,
                     [ColNameExportServiceExportExpireTime]: exp.expireTime,
-                    [ColNameExportServiceExportFilterOptions]:
-                        this.binaryConverter.toBuffer(exp.filterOptions),
+                    [ColNameExportServiceExportFilterOptions]: this.binaryConverter.toBuffer(exp.filterOptions),
                     [ColNameExportServiceExportStatus]: exp.status,
-                    [ColNameExportServiceExportExportedFileFilename]:
-                        exp.exportedFileFilename,
+                    [ColNameExportServiceExportExportedFileFilename]: exp.exportedFileFilename,
                 })
                 .where({
                     [ColNameExportServiceExportExportId]: exp.id,
@@ -257,34 +212,35 @@ export class ExportDataAccessorImpl implements ExportDataAccessor {
                 this.logger.debug("no export with export_id found", {
                     exportId: id,
                 });
-                throw new ErrorWithStatus(
-                    `no export with export_id ${id} found`,
-                    status.NOT_FOUND
-                );
+                throw new ErrorWithStatus(`no export with export_id ${id} found`, status.NOT_FOUND);
             }
         } catch (error) {
-            this.logger.error("failed to delete export", { error });
+            this.logger.error("failed to delete export", { error, exportId: id });
             throw ErrorWithStatus.wrapWithStatus(error, status.INTERNAL);
         }
     }
 
-    public async withTransaction<T>(
-        executeFunc: (dataAccessor: ExportDataAccessor) => Promise<T>
-    ): Promise<T> {
+    public async deleteExpiredExportList(requestTime: number): Promise<void> {
+        try {
+            await this.knex
+                .delete()
+                .from(TabNameExportServiceExport)
+                .where(ColNameExportServiceExportExpireTime, "<", requestTime);
+        } catch (error) {
+            this.logger.error("failed to delete expired export", { error, requestTime });
+            throw ErrorWithStatus.wrapWithStatus(error, status.INTERNAL);
+        }
+    }
+
+    public async withTransaction<T>(executeFunc: (dataAccessor: ExportDataAccessor) => Promise<T>): Promise<T> {
         return this.knex.transaction(async (tx) => {
-            const txDataAccessor = new ExportDataAccessorImpl(
-                tx,
-                this.binaryConverter,
-                this.logger
-            );
+            const txDataAccessor = new ExportDataAccessorImpl(tx, this.binaryConverter, this.logger);
             return executeFunc(txDataAccessor);
         });
     }
 
     private getExportFromRow(row: Record<string, any>): Export {
-        const filterOptions = this.binaryConverter.fromBuffer(
-            row[ColNameExportServiceExportFilterOptions]
-        );
+        const filterOptions = this.binaryConverter.fromBuffer(row[ColNameExportServiceExportFilterOptions]);
         return new Export(
             +row[ColNameExportServiceExportExportId],
             +row[ColNameExportServiceExportRequestedByUserId],
@@ -298,12 +254,6 @@ export class ExportDataAccessorImpl implements ExportDataAccessor {
     }
 }
 
-injected(
-    ExportDataAccessorImpl,
-    KNEX_INSTANCE_TOKEN,
-    BINARY_CONVERTER_TOKEN,
-    LOGGER_TOKEN
-);
+injected(ExportDataAccessorImpl, KNEX_INSTANCE_TOKEN, BINARY_CONVERTER_TOKEN, LOGGER_TOKEN);
 
-export const EXPORT_DATA_ACCESSOR_TOKEN =
-    token<ExportDataAccessor>("ExportDataAccessor");
+export const EXPORT_DATA_ACCESSOR_TOKEN = token<ExportDataAccessor>("ExportDataAccessor");

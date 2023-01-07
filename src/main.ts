@@ -1,4 +1,5 @@
 import minimist from "minimist";
+import { deleteExpiredExports } from "./cmd/delete_expired_exports";
 import { migrateFilesToS3 } from "./cmd/migrate_files_to_s3";
 import { startGRPCServer } from "./cmd/start_grpc_server";
 import { startKafkaConsumer } from "./cmd/start_kafka_consumer";
@@ -10,6 +11,8 @@ if (args["start_grpc_server"]) {
     startKafkaConsumer(".env");
 } else if (args["migrate_files_to_s3"]) {
     migrateFilesToS3(".env");
+} else if (args["delete_expired_exports"]) {
+    deleteExpiredExports(".env");
 } else {
     console.log("no component was selected, exiting...");
 }
