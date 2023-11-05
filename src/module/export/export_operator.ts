@@ -49,7 +49,7 @@ export class ExportOperatorImpl implements ExportOperator {
         }
         this.logger.info("export request found", { exportId: id, exportRequest });
 
-        const exportData = await this.getExportData(exportRequest.filterOptions);
+        const exportData = await this.getExportData(exportRequest.requestedByUserId, exportRequest.filterOptions);
         this.logger.info("retrieved image information", { imageCount: exportData.imageList.length });
 
         const { name: exportedFileDirectory, removeCallback: exportedFileDirectoryCleanup } = dirSync({
@@ -92,8 +92,11 @@ export class ExportOperatorImpl implements ExportOperator {
         });
     }
 
-    private async getExportData(filterOptions: ImageListFilterOptions): Promise<ExportData> {
-        const { imageList, imageTagList, regionList } = await this.imageInfoProvider.getImageList(filterOptions);
+    private async getExportData(userId: number, filterOptions: ImageListFilterOptions): Promise<ExportData> {
+        const { imageList, imageTagList, regionList } = await this.imageInfoProvider.getManageableImageListOfUser(
+            userId,
+            filterOptions
+        );
 
         const regionSnapshotListAtPublishTime: Region[][] = [];
         const regionSnapshotListAtVerifyTime: Region[][] = [];

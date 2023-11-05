@@ -12,7 +12,8 @@ import { injected, token } from "brandi";
 import { IMAGE_SERVICE_DM_TOKEN } from "../../dataaccess/grpc";
 
 export interface ImageInfoProvider {
-    getImageList(
+    getManageableImageListOfUser(
+        userId: number,
         filterOptions: ImageListFilterOptions
     ): Promise<{ imageList: Image[]; imageTagList: ImageTag[][]; regionList: Region[][] }>;
     getRegionSnapshotListAtStatus(imageId: number, atStatus: _ImageStatus_Values): Promise<Region[]>;
@@ -25,7 +26,8 @@ export class ImageInfoProviderImpl implements ImageInfoProvider {
         private readonly logger: Logger
     ) {}
 
-    public async getImageList(
+    public async getManageableImageListOfUser(
+        userId: number,
         filterOptions: ImageListFilterOptions
     ): Promise<{ imageList: Image[]; imageTagList: ImageTag[][]; regionList: Region[][] }> {
         const imageList: Image[] = [];
@@ -34,8 +36,9 @@ export class ImageInfoProviderImpl implements ImageInfoProvider {
 
         for (let currentOffset = 0; ; currentOffset = imageList.length) {
             const { error: getImageListError, response: getImageListResponse } = await promisifyGRPCCall(
-                this.imageServiceDM.getImageList.bind(this.imageServiceDM),
+                this.imageServiceDM.getManageableImageListOfUser.bind(this.imageServiceDM),
                 {
+                    userId: userId,
                     sortOrder: _ImageListSortOrder_Values.ID_ASCENDING,
                     filterOptions: filterOptions,
                     offset: currentOffset,
