@@ -17,6 +17,8 @@ export interface DatasetExporterArguments {
     imageList: ImageProto[];
     imageTagList: ImageTagProto[][];
     regionList: RegionProto[][];
+    regionSnapshotListAtPublishTime: RegionProto[][];
+    regionSnapshotListAtVerifyTime: RegionProto[][];
 }
 
 export interface DatasetExporter {
@@ -34,12 +36,20 @@ export class DatasetExporterImpl implements DatasetExporter {
     ) {}
 
     public async generateExportFile(args: DatasetExporterArguments): Promise<string> {
-        const { imageList, imageTagList, regionList } = args;
+        const { imageList, imageTagList, regionList, regionSnapshotListAtPublishTime, regionSnapshotListAtVerifyTime } =
+            args;
         const exportedFileName = await this.getExportedFileName();
         const archiver = this.getArchiver(args.exportedFileDirectory, exportedFileName);
         for (let i = 0; i < imageList.length; i++) {
             await this.addImageToArchive(archiver, imageList[i]);
-            await this.addImageMetadataToArchive(archiver, imageList[i], imageTagList[i], regionList[i]);
+            await this.addImageMetadataToArchive(
+                archiver,
+                imageList[i],
+                imageTagList[i],
+                regionList[i],
+                regionSnapshotListAtPublishTime[i],
+                regionSnapshotListAtVerifyTime[i]
+            );
         }
         await archiver.finalize();
         return exportedFileName;
@@ -92,9 +102,17 @@ export class DatasetExporterImpl implements DatasetExporter {
         archiver: Archiver,
         imageProto: ImageProto,
         imageTagProtoList: ImageTagProto[],
-        regionProtoList: RegionProto[]
+        regionProtoList: RegionProto[],
+        regionSnapshotListAtPublishTime: RegionProto[],
+        regionSnapshotListAtVerifyTime: RegionProto[]
     ): Promise<void> {
-        const imageMetadataJSON = await this.getImageMetadataJSON(imageProto, imageTagProtoList, regionProtoList);
+        const imageMetadataJSON = await this.getImageMetadataJSON(
+            imageProto,
+            imageTagProtoList,
+            regionProtoList,
+            regionSnapshotListAtPublishTime,
+            regionSnapshotListAtVerifyTime
+        );
         const exportedMetadataFilename = this.getExportedMetadataFilename(imageProto.id || 0);
         archiver.append(imageMetadataJSON, {
             name: exportedMetadataFilename,
@@ -105,7 +123,9 @@ export class DatasetExporterImpl implements DatasetExporter {
     private async getImageMetadataJSON(
         imageProto: ImageProto,
         imageTagProtoList: ImageTagProto[],
-        regionProtoList: RegionProto[]
+        regionProtoList: RegionProto[],
+        regionSnapshotListAtPublishTime: RegionProto[],
+        regionSnapshotListAtVerifyTime: RegionProto[]
     ): Promise<string> {
         const image = await this.imageProtoToImageConverter.convert(imageProto);
         const imageTagList = imageTagProtoList.map(
@@ -114,10 +134,18 @@ export class DatasetExporterImpl implements DatasetExporter {
         const regionList = await Promise.all(
             regionProtoList.map((regionProto) => this.regionProtoToRegionConverter.convert(regionProto))
         );
+        const regionListAtPublishTime = await Promise.all(
+            regionSnapshotListAtPublishTime.map((regionProto) => this.regionProtoToRegionConverter.convert(regionProto))
+        );
+        const regionListAtVerifyTime = await Promise.all(
+            regionSnapshotListAtVerifyTime.map((regionProto) => this.regionProtoToRegionConverter.convert(regionProto))
+        );
         return JSON.stringify({
             image: image,
             image_tag_list: imageTagList,
             region_list: regionList,
+            region_list_at_publish_time: regionListAtPublishTime,
+            region_list_at_verify_time: regionListAtVerifyTime,
         });
     }
 
